@@ -1,0 +1,7 @@
+fastapi>=0.110
+uvicorn[standard]>=0.28
+confluent-kafka>=2.3
+prometheus-client>=0.20
+prometheus-fastapi-instrumentator>=6.1
+pydantic>=2.6
+websockets>=12.0

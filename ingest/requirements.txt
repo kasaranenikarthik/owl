@@ -1,0 +1,5 @@
+opencv-python-headless>=4.9
+confluent-kafka>=2.3
+prometheus-client>=0.20
+pydantic>=2.6
+numpy
