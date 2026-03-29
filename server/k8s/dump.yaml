@@ -1,0 +1,659 @@
+###############################################################################
+# 00-namespace.yaml
+###############################################################################
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: yolo-realtime
+
+---
+###############################################################################
+# 01-configmap.yaml
+###############################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pipeline-config
+  namespace: yolo-realtime
+data:
+  KAFKA_BROKERS: "yolo-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092"
+  KAFKA_FRAMES_TOPIC: "frames"
+  KAFKA_DETECTIONS_TOPIC: "detections"
+  # Replace with: terraform output redis_endpoint
+  REDIS_ADDR: "yolo-realtime-redis.xxxxx.cache.amazonaws.com:6379"
+  SIMILARITY_THRESHOLD: "5"
+  CACHE_TTL_SECONDS: "30"
+  CONFIDENCE_THRESHOLD: "0.5"
+
+---
+###############################################################################
+# 02-gateway.yaml
+###############################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: yolo-realtime
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      nodeSelector:
+        role: cpu-workload
+      containers:
+        - name: gateway
+          image: your-registry/yolo-gateway:latest
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          envFrom:
+            - configMapRef:
+                name: pipeline-config
+          env:
+            - name: HTTP_PORT
+              value: "8080"
+            - name: METRICS_PORT
+              value: "9090"
+            - name: KAFKA_CONSUMER_GROUP
+              value: "gateway-detections"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9090
+            initialDelaySeconds: 3
+            periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: yolo-realtime
+spec:
+  type: LoadBalancer
+  selector:
+    app: gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gateway-hpa
+  namespace: yolo-realtime
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+
+---
+###############################################################################
+# 03-inference.yaml  (Bridge + Triton sidecar on GPU node)
+###############################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference
+  namespace: yolo-realtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference
+  template:
+    metadata:
+      labels:
+        app: inference
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      nodeSelector:
+        role: gpu-inference
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+      # Init container: download YOLO model to shared volume
+      initContainers:
+        - name: model-loader
+          image: alpine:3.19
+          command: ["sh", "-c"]
+          args:
+            - |
+              apk add --no-cache wget
+              mkdir -p /models/yolov8s/1
+              wget -q -O /models/yolov8s/1/model.onnx \
+                https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8s.onnx
+              cat > /models/yolov8s/config.pbtxt << 'EOF'
+              name: "yolov8s"
+              platform: "onnxruntime_onnx"
+              max_batch_size: 8
+              input [{
+                name: "images"
+                data_type: TYPE_FP32
+                dims: [3, 640, 640]
+              }]
+              output [{
+                name: "output0"
+                data_type: TYPE_FP32
+                dims: [84, 8400]
+              }]
+              dynamic_batching {
+                preferred_batch_size: [4, 8]
+                max_queue_delay_microseconds: 10000
+              }
+              instance_group [{
+                count: 1
+                kind: KIND_GPU
+              }]
+              EOF
+              echo "Model loaded successfully"
+          volumeMounts:
+            - name: model-repo
+              mountPath: /models
+
+      containers:
+        # --- Triton Inference Server (GPU) ---
+        - name: triton
+          image: nvcr.io/nvidia/tritonserver:24.01-py3
+          args:
+            - tritonserver
+            - --model-repository=/models
+            - --strict-model-config=true
+            - --log-verbose=0
+            - --metrics-port=8002
+            - --allow-metrics=true
+            - --allow-gpu-metrics=true
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: grpc
+              containerPort: 8001
+            - name: triton-metrics
+              containerPort: 8002
+          volumeMounts:
+            - name: model-repo
+              mountPath: /models
+              readOnly: true
+          resources:
+            requests:
+              cpu: "1"
+              memory: "4Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v2/health/live
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+
+        # --- Kafka-to-Triton Bridge (CPU) ---
+        - name: bridge
+          image: your-registry/yolo-bridge:latest
+          envFrom:
+            - configMapRef:
+                name: pipeline-config
+          env:
+            - name: KAFKA_CONSUMER_GROUP
+              value: "yolo-inference"
+            - name: TRITON_HTTP_ADDR
+              value: "localhost:8000"
+            - name: METRICS_PORT
+              value: "9090"
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: "1"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+
+      volumes:
+        - name: model-repo
+          emptyDir: {}
+
+---
+# Service to expose Triton metrics for Prometheus scraping
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-metrics
+  namespace: yolo-realtime
+  labels:
+    app: inference
+spec:
+  selector:
+    app: inference
+  ports:
+    - name: triton-metrics
+      port: 8002
+      targetPort: 8002
+    - name: bridge-metrics
+      port: 9090
+      targetPort: 9090
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: inference-hpa
+  namespace: yolo-realtime
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: inference
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: kafka_consumer_lag
+        target:
+          type: AverageValue
+          averageValue: "500"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+
+---
+###############################################################################
+# 04-service-monitors.yaml
+###############################################################################
+
+# Scrape bridge pods (gateway + inference bridge custom metrics)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yolo-realtime-apps
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: ["yolo-realtime"]
+  selector:
+    matchLabels: {}
+  endpoints:
+    - port: metrics
+      interval: 10s
+    - port: bridge-metrics
+      interval: 10s
+
+---
+# Scrape Triton's native metrics (includes per-model inference stats)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: triton-metrics
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: ["yolo-realtime"]
+  selector:
+    matchLabels:
+      app: inference
+  endpoints:
+    - port: triton-metrics
+      interval: 10s
+      path: /metrics
+
+---
+# Scrape Kafka JMX metrics
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kafka-metrics
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: ["kafka"]
+  selector:
+    matchLabels:
+      strimzi.io/cluster: yolo-kafka
+  podMetricsEndpoints:
+    - port: tcp-prometheus
+      interval: 15s
+
+---
+# DCGM exporter ServiceMonitor (deployed by Helm in monitoring module)
+# This ensures Prometheus discovers the DCGM pods on GPU nodes.
+# The dcgm-exporter Helm chart creates its own ServiceMonitor when
+# serviceMonitor.enabled=true, but we add explicit relabeling here
+# to tag metrics with the yolo-realtime namespace for dashboard filtering.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dcgm-gpu-metrics
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: ["monitoring"]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dcgm-exporter
+  endpoints:
+    - port: metrics
+      interval: 10s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+
+---
+###############################################################################
+# 05-alerts.yaml
+###############################################################################
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: yolo-realtime-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: yolo-realtime
+      rules:
+        - alert: HighE2ELatency
+          expr: histogram_quantile(0.95, sum(rate(gateway_e2e_latency_seconds_bucket[5m])) by (le)) > 0.5
+          for: 2m
+          labels: { severity: warning }
+          annotations:
+            summary: "E2E p95 latency exceeds 500ms"
+
+        - alert: GPUUtilizationZero
+          expr: DCGM_FI_DEV_GPU_UTIL{namespace="yolo-realtime"} == 0
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "GPU idle for 5 minutes"
+
+        - alert: HighKafkaLag
+          expr: sum(kafka_consumer_lag_max{topic="frames"}) > 5000
+          for: 2m
+          labels: { severity: warning }
+          annotations:
+            summary: "Frame consumer lag exceeding 5000"
+
+        - alert: PodRestartLoop
+          expr: increase(kube_pod_container_status_restarts_total{namespace="yolo-realtime"}[15m]) > 3
+          labels: { severity: critical }
+          annotations:
+            summary: "Pod {{ $labels.pod }} restart-looping"
+
+        - alert: LowCacheHitRate
+          expr: rate(gateway_cache_hits_total[5m]) / (rate(gateway_cache_hits_total[5m]) + rate(gateway_cache_misses_total[5m])) < 0.1
+          for: 10m
+          labels: { severity: info }
+          annotations:
+            summary: "Cache hit rate below 10%"
+
+        - alert: GPUMemoryNearFull
+          expr: (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) * 100 > 90
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "GPU memory usage above 90% on {{ $labels.node }}"
+
+        - alert: GPUTemperatureHigh
+          expr: DCGM_FI_DEV_GPU_TEMP > 85
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "GPU temperature {{ $value }}C on {{ $labels.node }}"
+
+        - alert: GPUThrottling
+          expr: DCGM_FI_DEV_POWER_VIOLATION > 0
+          for: 2m
+          labels: { severity: warning }
+          annotations:
+            summary: "GPU power throttling detected on {{ $labels.node }}"
+
+        - alert: TritonInferenceFailures
+          expr: sum(rate(nv_inference_request_failure[5m])) > 0
+          for: 2m
+          labels: { severity: warning }
+          annotations:
+            summary: "Triton reporting inference failures"
+
+        - alert: TritonHighQueueTime
+          expr: (rate(nv_inference_queue_duration_us[5m]) / rate(nv_inference_request_success[5m])) > 50000
+          for: 3m
+          labels: { severity: warning }
+          annotations:
+            summary: "Triton queue time exceeds 50ms — batching may be saturated"
+
+        - alert: HighStaleFrameRate
+          expr: rate(yolo_frames_dropped_total[5m]) / (rate(yolo_frames_processed_total[5m]) + rate(yolo_frames_dropped_total[5m])) > 0.3
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Over 30% of frames are being dropped as stale"
+
+        - alert: WorkerPoolSaturated
+          expr: yolo_worker_pool_active / yolo_worker_pool_capacity > 0.9
+          for: 3m
+          labels: { severity: warning }
+          annotations:
+            summary: "Worker pool >90% utilized for 3 minutes — increase NUM_WORKERS or add GPU pod"
+
+        - alert: WorkerPoolQueueBacklog
+          expr: yolo_worker_pool_queue_depth / (yolo_worker_pool_capacity * 2) > 0.8
+          for: 2m
+          labels: { severity: warning }
+          annotations:
+            summary: "Worker queue buffer >80% full — frames may start blocking"
+
+---
+###############################################################################
+# 06-grafana-dashboard.yaml
+###############################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yolo-realtime-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  yolo-realtime.json: |
+    {
+      "dashboard": {
+        "title": "YOLO Realtime Pipeline",
+        "uid": "yolo-realtime",
+        "panels": [
+
+          {"title":"Active clients","type":"stat",
+           "targets":[{"expr":"sum(gateway_active_clients)"}],
+           "gridPos":{"h":5,"w":4,"x":0,"y":0}},
+
+          {"title":"Frames/sec received","type":"stat",
+           "targets":[{"expr":"sum(rate(gateway_frames_received_total[1m]))"}],
+           "gridPos":{"h":5,"w":4,"x":4,"y":0}},
+
+          {"title":"Cache hit rate","type":"gauge",
+           "targets":[{"expr":"sum(rate(gateway_cache_hits_total[5m])) / (sum(rate(gateway_cache_hits_total[5m])) + sum(rate(gateway_cache_misses_total[5m]))) * 100"}],
+           "gridPos":{"h":5,"w":4,"x":8,"y":0}},
+
+          {"title":"Inference FPS (Triton)","type":"stat",
+           "targets":[{"expr":"sum(rate(yolo_frames_processed_total[1m]))"}],
+           "gridPos":{"h":5,"w":4,"x":12,"y":0}},
+
+          {"title":"Frames dropped (stale)","type":"stat",
+           "targets":[{"expr":"sum(rate(yolo_frames_dropped_total[5m]))"}],
+           "gridPos":{"h":5,"w":4,"x":16,"y":0}},
+
+          {"title":"Triton batch size avg","type":"stat",
+           "targets":[{"expr":"rate(nv_inference_request_success[1m]) / rate(nv_inference_exec_count[1m])"}],
+           "gridPos":{"h":5,"w":4,"x":20,"y":0}},
+
+          {"title":"E2E latency p50/p95/p99","type":"timeseries",
+           "targets":[
+             {"expr":"histogram_quantile(0.5, sum(rate(gateway_e2e_latency_seconds_bucket[5m])) by (le))","legendFormat":"p50"},
+             {"expr":"histogram_quantile(0.95, sum(rate(gateway_e2e_latency_seconds_bucket[5m])) by (le))","legendFormat":"p95"},
+             {"expr":"histogram_quantile(0.99, sum(rate(gateway_e2e_latency_seconds_bucket[5m])) by (le))","legendFormat":"p99"}
+           ],
+           "gridPos":{"h":7,"w":12,"x":0,"y":5}},
+
+          {"title":"Triton inference latency p50/p95/p99","type":"timeseries",
+           "targets":[
+             {"expr":"histogram_quantile(0.5, sum(rate(yolo_inference_duration_seconds_bucket[5m])) by (le))","legendFormat":"p50 (bridge)"},
+             {"expr":"histogram_quantile(0.95, sum(rate(yolo_inference_duration_seconds_bucket[5m])) by (le))","legendFormat":"p95 (bridge)"},
+             {"expr":"histogram_quantile(0.5, sum(rate(nv_inference_compute_infer_duration_us_bucket[5m])) by (le)) / 1000","legendFormat":"p50 (triton GPU only)"}
+           ],
+           "gridPos":{"h":7,"w":12,"x":12,"y":5}},
+
+          {"title":"GPU utilization % (DCGM)","type":"timeseries",
+           "targets":[{"expr":"DCGM_FI_DEV_GPU_UTIL","legendFormat":"{{gpu}} on {{node}}"}],
+           "gridPos":{"h":7,"w":8,"x":0,"y":12}},
+
+          {"title":"GPU memory used (DCGM)","type":"timeseries",
+           "targets":[
+             {"expr":"DCGM_FI_DEV_FB_USED","legendFormat":"Used MB {{gpu}}"},
+             {"expr":"DCGM_FI_DEV_FB_FREE","legendFormat":"Free MB {{gpu}}"}
+           ],
+           "gridPos":{"h":7,"w":8,"x":8,"y":12}},
+
+          {"title":"GPU temperature (DCGM)","type":"timeseries",
+           "targets":[{"expr":"DCGM_FI_DEV_GPU_TEMP","legendFormat":"{{gpu}} on {{node}}"}],
+           "gridPos":{"h":7,"w":8,"x":16,"y":12}},
+
+          {"title":"GPU power usage watts (DCGM)","type":"timeseries",
+           "targets":[{"expr":"DCGM_FI_DEV_POWER_USAGE","legendFormat":"{{gpu}} on {{node}}"}],
+           "gridPos":{"h":7,"w":8,"x":0,"y":19}},
+
+          {"title":"GPU SM clock MHz (DCGM)","type":"timeseries",
+           "targets":[{"expr":"DCGM_FI_DEV_SM_CLOCK","legendFormat":"{{gpu}}"}],
+           "gridPos":{"h":7,"w":8,"x":8,"y":19}},
+
+          {"title":"GPU PCIe throughput (DCGM)","type":"timeseries",
+           "targets":[
+             {"expr":"rate(DCGM_FI_DEV_PCIE_TX_THROUGHPUT[1m])","legendFormat":"TX {{gpu}}"},
+             {"expr":"rate(DCGM_FI_DEV_PCIE_RX_THROUGHPUT[1m])","legendFormat":"RX {{gpu}}"}
+           ],
+           "gridPos":{"h":7,"w":8,"x":16,"y":19}},
+
+          {"title":"Triton request queue time","type":"timeseries",
+           "targets":[{"expr":"rate(nv_inference_queue_duration_us[1m]) / rate(nv_inference_request_success[1m]) / 1000","legendFormat":"Avg queue ms"}],
+           "gridPos":{"h":7,"w":8,"x":0,"y":26}},
+
+          {"title":"Triton requests success/fail","type":"timeseries",
+           "targets":[
+             {"expr":"sum(rate(nv_inference_request_success[1m]))","legendFormat":"Success/s"},
+             {"expr":"sum(rate(nv_inference_request_failure[1m]))","legendFormat":"Failure/s"}
+           ],
+           "gridPos":{"h":7,"w":8,"x":8,"y":26}},
+
+          {"title":"Triton GPU utilization (native)","type":"timeseries",
+           "targets":[{"expr":"nv_gpu_utilization * 100","legendFormat":"{{gpu_uuid}}"}],
+           "gridPos":{"h":7,"w":8,"x":16,"y":26}},
+
+          {"title":"Kafka consumer lag","type":"timeseries",
+           "targets":[
+             {"expr":"sum(kafka_consumer_lag_max{topic='frames'})","legendFormat":"frames"},
+             {"expr":"sum(kafka_consumer_lag_max{topic='detections'})","legendFormat":"detections"}
+           ],
+           "gridPos":{"h":7,"w":12,"x":0,"y":33}},
+
+          {"title":"Cache hits vs misses","type":"timeseries",
+           "targets":[
+             {"expr":"sum(rate(gateway_cache_hits_total[1m]))","legendFormat":"Cache hits/s"},
+             {"expr":"sum(rate(gateway_cache_misses_total[1m]))","legendFormat":"Cache misses/s"},
+             {"expr":"sum(rate(gateway_frames_dropped_stale_total[1m]))","legendFormat":"Stale drops/s"}
+           ],
+           "gridPos":{"h":7,"w":12,"x":12,"y":33}},
+
+          {"title":"Pod restarts (15m)","type":"timeseries",
+           "targets":[{"expr":"increase(kube_pod_container_status_restarts_total{namespace='yolo-realtime'}[15m])"}],
+           "gridPos":{"h":5,"w":24,"x":0,"y":40}},
+
+          {"title":"Worker pool utilization %","type":"timeseries",
+           "targets":[
+             {"expr":"yolo_worker_pool_active / yolo_worker_pool_capacity * 100","legendFormat":"Active workers %"}
+           ],
+           "gridPos":{"h":7,"w":8,"x":0,"y":45}},
+
+          {"title":"Worker pool queue depth","type":"timeseries",
+           "targets":[
+             {"expr":"yolo_worker_pool_queue_depth","legendFormat":"Queued frames"},
+             {"expr":"yolo_worker_pool_capacity * 2","legendFormat":"Buffer capacity"}
+           ],
+           "gridPos":{"h":7,"w":8,"x":8,"y":45}},
+
+          {"title":"Worker pool active vs capacity","type":"timeseries",
+           "targets":[
+             {"expr":"yolo_worker_pool_active","legendFormat":"Active workers"},
+             {"expr":"yolo_worker_pool_capacity","legendFormat":"Total workers"}
+           ],
+           "gridPos":{"h":7,"w":8,"x":16,"y":45}}
+        ]
+      }
+    }
