@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+.mypy_cache/
+.ruff_cache/
+*.egg
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data / Models
+data/
+*.mp4
+*.avi
+*.mkv
+*.pt
+*.onnx
+*.engine
+
+# Docker volumes
+kafka-data/
+prometheus-data/
+grafana-data/
+
+# OS
+.DS_Store
+Thumbs.db

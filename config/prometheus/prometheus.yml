@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: ingest
+    static_configs:
+      - targets: ["ingest:8001"]
+
+  - job_name: inference
+    static_configs:
+      - targets: ["inference:8002"]
+
+  - job_name: aggregator
+    static_configs:
+      - targets: ["aggregator:8003"]
+
+  - job_name: aggregator-fastapi
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["aggregator:8080"]
