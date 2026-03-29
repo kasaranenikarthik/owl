@@ -15,8 +15,8 @@ class OrderingBuffer:
     def __init__(self):
         # stream_id -> min-heap of (frame_id, DetectionMessage)
         self._heaps: dict[str, list[tuple[int, DetectionMessage]]] = defaultdict(list)
-        # stream_id -> next expected frame_id
-        self._next_expected: dict[str, int] = defaultdict(lambda: 1)
+        # stream_id -> next expected frame_id (initialized on first message)
+        self._next_expected: dict[str, int] = {}
         # stream_id -> recent ordered detections (bounded deque)
         self._recent: dict[str, deque[DetectionMessage]] = defaultdict(
             lambda: deque(maxlen=MAX_RECENT)
@@ -26,6 +26,11 @@ class OrderingBuffer:
         """Add a detection and return any newly ordered detections."""
         sid = detection.stream_id
         fid = detection.frame_id
+
+        # Initialize next_expected to the first frame_id we see for this stream
+        if sid not in self._next_expected:
+            self._next_expected[sid] = fid
+            logger.info("Stream %s: initialized next_expected to frame %d", sid, fid)
 
         # Drop duplicates / already-seen frames
         if fid < self._next_expected[sid]:

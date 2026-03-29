@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-BROKER="kafka:9092"
+BROKER="kafka:29092"
 
 echo "Waiting for Kafka to be ready..."
 until kafka-topics.sh --bootstrap-server "$BROKER" --list > /dev/null 2>&1; do

@@ -1,19 +1,18 @@
-version: "3.9"
-
 services:
   kafka:
-    image: bitnami/kafka:3.7
+    image: bitnamilegacy/kafka:4.0.0-debian-12-r10
     container_name: kafka
     ports:
       - "9092:9092"
     environment:
       - KAFKA_CFG_NODE_ID=1
       - KAFKA_CFG_PROCESS_ROLES=broker,controller
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
       - KAFKA_CFG_LOG_RETENTION_MS=600000
       - KAFKA_CFG_MESSAGE_MAX_BYTES=10485760
     volumes:
@@ -27,7 +26,7 @@ services:
       retries: 10
 
   kafka-init:
-    image: bitnami/kafka:3.7
+    image: bitnamilegacy/kafka:4.0.0-debian-12-r10
     container_name: kafka-init
     depends_on:
       kafka:
@@ -47,9 +46,11 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
-    env_file: .env
+    env_file: .env.docker
     ports:
       - "8001:8001"
+    volumes:
+      - ./data:/data:ro
     networks:
       - pipeline
     restart: unless-stopped
@@ -62,7 +63,7 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
-    env_file: .env
+    env_file: .env.docker
     ports:
       - "8002:8002"
     deploy:
@@ -84,7 +85,7 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
-    env_file: .env
+    env_file: .env.docker
     ports:
       - "8080:8080"
       - "8003:8003"
