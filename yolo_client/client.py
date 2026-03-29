@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -94,15 +93,8 @@ class RealtimeClient:
         await client.run()
     """
 
-    def __init__(
-        self,
-        ws_url: str,
-        max_retries: int | None = None,
-        max_retry_delay_s: float = 10.0,
-    ):
+    def __init__(self, ws_url: str):
         self.ws_url = ws_url
-        self.max_retries = max_retries
-        self.max_retry_delay_s = max_retry_delay_s
         self.client_id: str | None = None
         self.on_result: Callable[[FrameResult], None] | None = None
         self.stats = Stats()
@@ -110,145 +102,67 @@ class RealtimeClient:
         self._ws = None
         self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=5)
         self._running = False
-        self._send_times: asyncio.Queue[float] = asyncio.Queue()  # FIFO of send timestamps
+        self._send_times: asyncio.Queue[float] = asyncio.Queue()
 
     async def connect(self):
         """Connect to the gateway WebSocket."""
-        await self._connect_with_retry()
-
-    async def _connect_once(self):
         logger.info("Connecting to %s", self.ws_url)
-        ws = await websockets.connect(
+        self._ws = await websockets.connect(
             self.ws_url,
-            max_size=256 * 1024,
+            max_size=2 * 1024 * 1024,
             ping_interval=20,
             ping_timeout=10,
         )
 
         # First message from server is the connection ack with client_id
-        raw = await ws.recv()
+        raw = await self._ws.recv()
         msg = json.loads(raw)
-        self._ws = ws
         self.client_id = msg.get("client_id")
         logger.info("Connected as client %s", self.client_id)
 
-    async def _connect_with_retry(self):
-        attempt = 0
-        while True:
-            try:
-                await self._connect_once()
-                return
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                await self._close_ws()
-                attempt += 1
-
-                if self.max_retries is not None and attempt > self.max_retries:
-                    logger.error("Connect failed after %s retries", self.max_retries)
-                    raise
-
-                base_delay = min(2 ** (attempt - 1), self.max_retry_delay_s)
-                jitter = random.uniform(0.0, min(1.0, base_delay * 0.2))
-                delay = min(base_delay + jitter, self.max_retry_delay_s)
-                logger.warning(
-                    "Connect attempt %s failed: %s; retrying in %.1fs",
-                    attempt,
-                    exc,
-                    delay,
-                )
-                await asyncio.sleep(delay)
-
     def send_frame(self, jpeg_data: bytes):
         """Queue a JPEG frame for sending. Non-blocking.
-
-        If the send queue is full (server can't keep up), drops the frame.
-        This prevents backpressure from stalling the capture loop.
+        Drops the frame if the send queue is full.
         """
         try:
             self._send_queue.put_nowait(jpeg_data)
             self.stats.frames_sent += 1
         except asyncio.QueueFull:
-            pass  # drop frame — server can't keep up
+            pass
 
     async def run(self):
         """Run the send and receive loops concurrently."""
         self._running = True
         try:
-            while self._running:
-                if self._ws is None:
-                    await self._connect_with_retry()
-
-                try:
-                    await self._run_connected_loops()
-                except websockets.ConnectionClosed:
-                    if not self._running:
-                        break
-                    logger.warning("Connection closed; reconnecting")
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    if not self._running:
-                        break
-                    logger.exception("Connection loop failed; reconnecting")
-                finally:
-                    await self._close_ws()
+            await asyncio.gather(
+                self._send_loop(),
+                self._recv_loop(),
+            )
+        except websockets.ConnectionClosed:
+            logger.warning("Connection closed")
         finally:
             self._running = False
 
-    async def _run_connected_loops(self):
-        send_task = asyncio.create_task(self._send_loop())
-        recv_task = asyncio.create_task(self._recv_loop())
-        done, pending = await asyncio.wait(
-            {send_task, recv_task},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-
-        for task in pending:
-            task.cancel()
-
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
-
-        for task in done:
-            if task.cancelled():
-                continue
-            exc = task.exception()
-            if exc is not None:
-                raise exc
-
     async def _send_loop(self):
         """Send queued frames as binary WebSocket messages."""
-        ws = self._ws
-        if ws is None:
-            return
-
         while self._running:
             try:
                 data = await asyncio.wait_for(self._send_queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
 
-            send_time = time.monotonic()
-            await ws.send(data)
-            # Track send time for E2E latency (FIFO — results return in order)
-            try:
-                self._send_times.put_nowait(send_time)
-            except asyncio.QueueFull:
-                pass
+            self._send_times.put_nowait(time.monotonic())
+            await self._ws.send(data)
 
     async def _recv_loop(self):
-        """Receive JSON detection results from server."""
-        ws = self._ws
-        if ws is None:
-            return
-
-        async for raw in ws:
+        """Receive JSON detection results from server.
+        Server already drops stale results — client accepts everything."""
+        async for raw in self._ws:
             now = time.monotonic()
 
             data = json.loads(raw)
             if data.get("type") == "connected":
-                continue  # skip the initial ack
+                continue
 
             result = FrameResult(
                 detections=[
@@ -265,16 +179,14 @@ class RealtimeClient:
                 ],
                 inference_ms=data.get("inference_ms", 0),
                 from_cache=data.get("from_cache", False),
-                timestamp=now,
+                timestamp=data.get("timestamp", time.time()),
             )
 
-            # Update stats
             self.stats.results_received += 1
             self.stats.total_inference_ms += result.inference_ms
             if result.from_cache:
                 self.stats.cache_hits += 1
 
-            # E2E latency — match with oldest unmatched send time
             try:
                 send_time = self._send_times.get_nowait()
                 e2e = (now - send_time) * 1000
@@ -287,10 +199,5 @@ class RealtimeClient:
 
     async def close(self):
         self._running = False
-        await self._close_ws()
-
-    async def _close_ws(self):
-        ws = self._ws
-        self._ws = None
-        if ws:
-            await ws.close()
+        if self._ws:
+            await self._ws.close()
