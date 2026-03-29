@@ -1,0 +1,14 @@
+# Copy this file to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+
+aws_region    = "us-east-1"
+project_name  = "video-pipeline"
+key_pair_name = "YOUR_KEY_PAIR_NAME"   # <-- change this
+
+# GPU settings — set use_gpu=false and instance_type="t3.xlarge" if GPU quota is 0
+use_gpu       = true
+instance_type = "g4dn.xlarge"
+
+# AWS Academy instance profile — "LabInstanceProfile" is the standard one.
+# If terraform errors, check IAM → Instance Profiles for the exact name.
+iam_instance_profile_name = "LabInstanceProfile"
