@@ -420,3 +420,75 @@ make down
 | 5  | Ordering under distributed processing | Artificial jitter, heterogeneous workers | Reorder rate, buffer size, ordering latency      |
 
 Each experiment will be run against the metrics exposed through Prometheus/Grafana to capture quantitative results.
+
+---
+
+## Appendix A. Architecture Diagram for `origin/karthikfeature`
+
+This appendix documents the architecture implemented on remote branch `origin/karthikfeature` at commit `9c8d7dbfae13e3937342e0db1c5044ac1345fb6f`. That branch uses a different runtime than the current Python ingest/inference/aggregator pipeline in this document.
+
+```mermaid
+flowchart LR
+    subgraph Client["Client / Edge"]
+        Sources["Video sources<br/>webcam | video file | RTSP/RTMP"]
+        CLI["Python yolo_client<br/>OpenCV capture + JPEG encode<br/>live preview / overlay"]
+        Sources --> CLI
+    end
+
+    subgraph Runtime["Realtime Inference Runtime"]
+        Gateway["Gateway service (Go)<br/>WebSocket /ws<br/>client registry + frame sequencing"]
+        Redis["Redis similarity cache<br/>frame hash + last result per client"]
+        Frames[("Kafka topic: frames<br/>12 partitions")]
+        Bridge["Inference bridge (Go)<br/>Kafka consumer group yolo-inference<br/>worker pool + stale frame drop"]
+        Triton["NVIDIA Triton Inference Server<br/>YOLOv8s ONNX model on GPU"]
+        Detections[("Kafka topic: detections<br/>12 partitions")]
+    end
+
+    subgraph Platform["Platform / Operations"]
+        EKS["Amazon EKS<br/>CPU node group + GPU node group"]
+        KafkaCluster["Strimzi Kafka cluster"]
+        ElastiCache["ElastiCache Redis"]
+        Monitoring["Prometheus + Grafana + Alertmanager<br/>plus DCGM GPU metrics"]
+    end
+
+    CLI -- "binary JPEG frames" --> Gateway
+    Gateway -- "average-hash lookup / update" --> Redis
+    Redis -- "cache hit: previous detections" --> Gateway
+    Gateway -- "cache miss: FrameMessage" --> Frames
+    Frames --> Bridge
+    Bridge -- "preprocess + HTTP inference" --> Triton
+    Triton -- "raw tensor output" --> Bridge
+    Bridge -- "InternalResult" --> Detections
+    Detections --> Gateway
+    Gateway -- "store latest result" --> Redis
+    Gateway -- "ClientResult JSON" --> CLI
+
+    EKS --- Gateway
+    EKS --- Bridge
+    EKS --- Triton
+    KafkaCluster --- Frames
+    KafkaCluster --- Detections
+    ElastiCache --- Redis
+
+    Gateway -. metrics .-> Monitoring
+    Bridge -. metrics .-> Monitoring
+    Triton -. metrics .-> Monitoring
+    KafkaCluster -. lag / JMX metrics .-> Monitoring
+```
+
+### Karthik Branch Flow Summary
+
+1. The Python `yolo_client` reads frames from a webcam, video file, or RTSP/RTMP stream and sends JPEG bytes to the gateway over WebSocket.
+2. The Go gateway assigns a per-client `frame_id`, computes a similarity hash, and checks Redis for a reusable cached result.
+3. Cache hits are returned immediately to the client; cache misses are published to Kafka topic `frames`.
+4. The Go inference bridge consumes `frames`, drops stale work, preprocesses images with GoCV, and calls Triton over HTTP for YOLOv8s inference.
+5. The bridge post-processes detections and publishes results to Kafka topic `detections`.
+6. The gateway consumes `detections`, stores the latest result in Redis, drops stale out-of-order responses, and streams JSON detections back to the client.
+
+### Deployment Notes
+
+- Gateway replicas run on CPU nodes behind a load balancer and expose both `/ws` and Prometheus metrics.
+- The inference deployment runs on GPU nodes and colocates the Go bridge with a Triton sidecar that serves the YOLOv8s ONNX model.
+- Kafka is provisioned via Strimzi with separate `frames` and `detections` topics.
+- Redis is externalized through ElastiCache and used only for perceptual-similarity caching, not as the main transport.
+- Monitoring combines application metrics, Kafka lag, Triton metrics, and DCGM GPU telemetry in Grafana/Prometheus.

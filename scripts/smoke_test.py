@@ -9,7 +9,7 @@ BASE_URL = "http://localhost:8080"
 METRICS_ENDPOINTS = [
     ("ingest", "http://localhost:8001"),
     ("inference", "http://localhost:8002"),
-    ("aggregator", "http://localhost:8003"),
+    ("aggregator", "http://localhost:8080/metrics"),
 ]
 
 

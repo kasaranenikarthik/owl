@@ -1,7 +1,6 @@
 services:
   kafka:
     image: bitnamilegacy/kafka:4.0.0-debian-12-r10
-    container_name: kafka
     ports:
       - "9092:9092"
     environment:
@@ -26,7 +25,6 @@ services:
 
   kafka-init:
     image: bitnamilegacy/kafka:4.0.0-debian-12-r10
-    container_name: kafka-init
     depends_on:
       kafka:
         condition: service_healthy
@@ -41,7 +39,6 @@ services:
     build:
       context: .
       dockerfile: ingest/Dockerfile
-    container_name: ingest
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -58,7 +55,6 @@ services:
     build:
       context: .
       dockerfile: inference/Dockerfile
-    container_name: inference
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -80,21 +76,18 @@ services:
     build:
       context: .
       dockerfile: aggregator/Dockerfile
-    container_name: aggregator
     depends_on:
       kafka-init:
         condition: service_completed_successfully
     env_file: .env
     ports:
       - "8080:8080"
-      - "8003:8003"
     networks:
       - pipeline
     restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:v2.51.0
-    container_name: prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -105,7 +98,6 @@ services:
 
   grafana:
     image: grafana/grafana:10.4.0
-    container_name: grafana
     ports:
       - "3000:3000"
     environment:
