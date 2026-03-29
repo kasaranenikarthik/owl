@@ -12,7 +12,7 @@ import colorsys
 import cv2
 import numpy as np
 
-from yolo_client.client import Detection, FrameResult, Stats
+from client import Detection, FrameResult, Stats
 
 
 def _colors(n: int) -> list[tuple[int, int, int]]:

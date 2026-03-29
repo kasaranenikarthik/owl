@@ -16,15 +16,15 @@ import time
 
 import cv2
 
-from yolo_client.client import RealtimeClient, FrameResult
-from yolo_client.sources import (
+from client import RealtimeClient, FrameResult
+from sources import (
     WebcamSource,
     VideoFileSource,
     RTSPSource,
     encode_jpeg,
     FrameSource,
 )
-from yolo_client.renderer import draw_detections, draw_overlay
+from renderer import draw_detections, draw_overlay
 
 logger = logging.getLogger("yolo_client")
 
