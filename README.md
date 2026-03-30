@@ -15,6 +15,10 @@ Core goals:
 - Support similarity-aware behavior and caching to avoid repeated expensive work.
 - Expose metrics and health signals for operations.
 
+# Architecture
+![alt text](Architecture.png)
+
+
 ## Data Flow
 
 The high-level data path is:
