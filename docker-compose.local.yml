@@ -1,0 +1,118 @@
+# ============================================================
+# docker-compose.local.yml — Run the full pipeline on your Mac
+#
+# No AWS, no GPU, no Terraform. Just:
+#   docker compose -f docker-compose.local.yml up --build
+#
+# YOLOv8 runs on CPU (~5-15 fps). Good for:
+#   - Building and debugging the pipeline
+#   - Testing Kafka flow and reorder buffer logic
+#   - Verifying API responses before deploying to cloud
+#
+# The cloud Terraform setup is for final experiments where
+# you need GPU throughput numbers for your report.
+# ============================================================
+
+version: "3.8"
+
+services:
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_MESSAGE_MAX_BYTES: 2000000
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 2000000
+      KAFKA_NUM_PARTITIONS: 1
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  ingest:
+    build:
+      context: ./src/ingest-service
+      dockerfile: Dockerfile
+    container_name: ingest
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      TOPIC_RAW_FRAMES: raw-frames
+      VIDEO_SOURCE: /videos/test.mp4
+      STREAM_ID: stream-0
+      # 3 fps locally — CPU worker can comfortably keep up at this rate.
+      # Increase to 5-10 once you confirm the pipeline is flowing.
+      TARGET_FPS: 3
+    volumes:
+      # Mount a local video file if you have one.
+      # If sample-videos/ is empty, the baked-in synthetic video is used.
+      - ./sample-videos:/videos:ro
+    restart: unless-stopped
+
+  inference-worker-0:
+    build:
+      context: ./src/inference-worker
+      # Uses the CPU-only Dockerfile (plain python, no nvidia/cuda)
+      dockerfile: Dockerfile.cpu
+    container_name: inference-worker-0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      TOPIC_RAW_FRAMES: raw-frames
+      TOPIC_DETECTIONS: detections
+      CONSUMER_GROUP: inference-workers
+      WORKER_ID: worker-0
+      MODEL_SIZE: yolov8n
+      CONFIDENCE_THRESHOLD: "0.5"
+    # No GPU block — runs on CPU automatically
+    restart: unless-stopped
+
+  aggregator:
+    build:
+      context: ./src/aggregator
+      dockerfile: Dockerfile
+    container_name: aggregator
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      TOPIC_DETECTIONS: detections
+      CONSUMER_GROUP: aggregator
+      REORDER_WINDOW: "30"
+      API_PORT: "8080"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

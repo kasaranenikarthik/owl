@@ -1,15 +1,7 @@
 """
-Inference Worker - consumes frames from "raw-frames" Kafka topic,
-runs YOLOv8 object detection on the GPU, and publishes detection
-results to the "detections" Kafka topic.
-
-YOLOv8 ("You Only Look Once" version 8):
-  - Input: an image (your video frame)
-  - Output: bounding boxes + class labels + confidence scores
-  - Example: "person at (x1,y1,x2,y2) with 0.92 confidence"
-
-On the T4 GPU: ~200+ fps with yolov8n
-On CPU:        ~5-15 fps
+Inference Worker — consumes frames from Kafka "raw-frames" topic,
+runs YOLOv8 object detection (GPU if available, CPU fallback),
+and publishes detection results to "detections" topic.
 """
 
 import os
@@ -36,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 
 def wait_for_kafka(max_retries=30, delay=2):
-    """Block until Kafka is reachable."""
     for attempt in range(max_retries):
         try:
             p = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP, "socket.timeout.ms": 2000})
@@ -44,7 +35,7 @@ def wait_for_kafka(max_retries=30, delay=2):
             logger.info("Kafka is ready")
             return
         except Exception:
-            logger.info(f"Waiting for Kafka... ({attempt+1}/{max_retries})")
+            logger.info(f"Waiting for Kafka... ({attempt + 1}/{max_retries})")
             time.sleep(delay)
     raise RuntimeError("Kafka not available after retries")
 
@@ -82,7 +73,6 @@ def load_model():
     model = YOLO(f"{MODEL_SIZE}.pt")
     model.to(device)
 
-    # Warm up — first inference is slow due to CUDA JIT compilation
     dummy = np.zeros((480, 640, 3), dtype=np.uint8)
     model(dummy, verbose=False)
     logger.info("Model loaded and warmed up")
@@ -96,7 +86,6 @@ def run_inference(model, jpeg_bytes):
         return []
 
     results = model(frame, conf=CONFIDENCE_THRESHOLD, verbose=False)
-
     detections = []
     for result in results:
         for box in result.boxes:
@@ -122,7 +111,6 @@ def run_worker():
     try:
         while True:
             msg = consumer.poll(timeout=1.0)
-
             if msg is None:
                 continue
             if msg.error():

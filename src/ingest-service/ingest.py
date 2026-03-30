@@ -1,14 +1,11 @@
 """
-Ingest Service - reads a video file, extracts frames,
-and publishes each frame to the Kafka topic "raw-frames".
+Ingest Service — reads a video file, extracts frames at a target FPS,
+and publishes each frame as a Kafka message to the "raw-frames" topic.
 
-WHY Kafka instead of SNS/SQS?
-  In HW7 you used SNS -> SQS for fire-and-forget events.
-  Kafka is better for streaming because:
-    1. Retains messages on disk (replay if a worker crashes)
-    2. Partitions enable horizontal consumer scaling (Week 2)
-    3. Handles high-throughput binary data (video frames) efficiently
-    4. Consumer groups auto-balance partition assignment
+Message format:
+  key:     stream_id (bytes)
+  value:   JPEG-encoded frame (binary)
+  headers: frame_id, timestamp, stream_id
 """
 
 import os
@@ -43,8 +40,6 @@ def create_producer():
 
 
 def wait_for_kafka(max_retries=30, delay=2):
-    """Block until Kafka is reachable. ECS starts all services roughly
-    together, so Kafka may not be ready when this container starts."""
     for attempt in range(max_retries):
         try:
             p = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP, "socket.timeout.ms": 2000})
@@ -52,7 +47,7 @@ def wait_for_kafka(max_retries=30, delay=2):
             logger.info("Kafka is ready")
             return
         except Exception:
-            logger.info(f"Waiting for Kafka... (attempt {attempt+1}/{max_retries})")
+            logger.info(f"Waiting for Kafka... ({attempt + 1}/{max_retries})")
             time.sleep(delay)
     raise RuntimeError("Kafka not available after retries")
 

@@ -1,0 +1,27 @@
+{
+  "dashboard": {
+    "title": "OWL Pipeline Overview",
+    "panels": [
+      {
+        "title": "Throughput (fps)",
+        "type": "graph",
+        "targets": [{"expr": "rate(frames_processed_total[1m])"}]
+      },
+      {
+        "title": "Inference Latency (ms)",
+        "type": "graph",
+        "targets": [{"expr": "histogram_quantile(0.95, inference_duration_seconds_bucket)"}]
+      },
+      {
+        "title": "Kafka Consumer Lag",
+        "type": "graph",
+        "targets": [{"expr": "kafka_consumergroup_lag"}]
+      },
+      {
+        "title": "Reorder Buffer Size",
+        "type": "graph",
+        "targets": [{"expr": "reorder_buffer_size"}]
+      }
+    ]
+  }
+}

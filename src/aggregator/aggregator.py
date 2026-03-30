@@ -1,18 +1,12 @@
 """
-Aggregator Service - consumes detections from Kafka, maintains a
+Aggregator Service — consumes detections from Kafka, maintains a
 per-stream reorder buffer, and exposes results via a REST API.
 
-The reorder buffer works like TCP's receive window:
-  - Tracks "next expected" frame_id per stream
-  - Buffers out-of-order results
-  - Emits in-order when the expected frame arrives
-  - Force-advances if the window fills up (frame lost)
-
-REST endpoints:
-  GET /health            — health check
-  GET /streams           — list all streams with stats
-  GET /streams/{id}      — latest detections for one stream
-  GET /stats             — overall pipeline statistics
+Endpoints:
+  GET /health             — health check
+  GET /streams            — list all streams with stats
+  GET /streams/{id}       — latest detections for a stream
+  GET /stats              — pipeline-wide statistics
 """
 
 import os
@@ -37,6 +31,8 @@ app = Flask(__name__)
 
 
 class ReorderBuffer:
+    """Per-stream sliding window that emits frames in order."""
+
     def __init__(self, stream_id, window_size=30):
         self.stream_id = stream_id
         self.window_size = window_size
@@ -112,7 +108,7 @@ def wait_for_kafka(max_retries=30, delay=2):
             logger.info("Kafka is ready")
             return
         except Exception:
-            logger.info(f"Waiting for Kafka... ({attempt+1}/{max_retries})")
+            logger.info(f"Waiting for Kafka... ({attempt + 1}/{max_retries})")
             time.sleep(delay)
     raise RuntimeError("Kafka not available after retries")
 
