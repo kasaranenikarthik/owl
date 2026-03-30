@@ -1,6 +1,6 @@
-# OWL — Distributed Real-Time Video Inference Pipeline
+# Distributed Real-Time Video Inference Pipeline
 
-## Santrupti's Branch: Cloud Infrastructure + Core Pipeline
+## Cloud Infrastructure + Core Pipeline
 
 This branch contains the **cloud deployment infrastructure** and **core distributed pipeline** for the OWL project. It provides the foundational services (ingest, inference worker, aggregator) deployed on AWS via Terraform-managed ECS with GPU support.
 
