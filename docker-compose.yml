@@ -93,6 +93,21 @@ services:
       - pipeline
     restart: unless-stopped
 
+  viewer:
+    build:
+      context: .
+      dockerfile: viewer/Dockerfile
+    container_name: viewer
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    env_file: .env.docker
+    ports:
+      - "8085:8085"
+    networks:
+      - pipeline
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: prometheus
