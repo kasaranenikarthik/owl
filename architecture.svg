@@ -1,0 +1,84 @@
+<svg width="800" viewBox="0 0 680 720" xmlns="http://www.w3.org/2000/svg" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a1a;">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<rect x="200" y="18" width="280" height="44" rx="8" fill="#2c2c2a" stroke="#5f5e5a" stroke-width="0.5"/>
+<text x="340" y="34" text-anchor="middle" dominant-baseline="central" fill="#d3d1c7" font-size="14" font-weight="500">Terraform (your Mac)</text>
+<text x="340" y="50" text-anchor="middle" dominant-baseline="central" fill="#888780" font-size="12">init / apply / destroy</text>
+
+<line x1="340" y1="62" x2="340" y2="85" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="355" y="78" fill="#888780" font-size="12">provisions</text>
+
+<rect x="40" y="88" width="600" height="590" rx="20" fill="#042C53" fill-opacity="0.3" stroke="#185FA5" stroke-width="0.5"/>
+<text x="60" y="114" fill="#85B7EB" font-size="14" font-weight="500">AWS (us-east-1)</text>
+
+<rect x="60" y="130" width="200" height="56" rx="10" fill="#04342C" fill-opacity="0.5" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="160" y="150" text-anchor="middle" fill="#5DCAA5" font-size="14" font-weight="500">VPC</text>
+<text x="160" y="168" text-anchor="middle" fill="#1D9E75" font-size="12">2 public subnets</text>
+
+<rect x="280" y="130" width="150" height="56" rx="10" fill="#26215C" fill-opacity="0.5" stroke="#534AB7" stroke-width="0.5"/>
+<text x="355" y="150" text-anchor="middle" fill="#AFA9EC" font-size="14" font-weight="500">ECR</text>
+<text x="355" y="168" text-anchor="middle" fill="#7F77DD" font-size="12">5 image repos</text>
+
+<rect x="450" y="130" width="170" height="56" rx="10" fill="#4A1B0C" fill-opacity="0.5" stroke="#993C1D" stroke-width="0.5"/>
+<text x="535" y="150" text-anchor="middle" fill="#F0997B" font-size="14" font-weight="500">CloudWatch</text>
+<text x="535" y="168" text-anchor="middle" fill="#D85A30" font-size="12">/ecs/video-pipeline</text>
+
+<rect x="60" y="210" width="560" height="450" rx="16" fill="none" stroke="#0F6E56" stroke-width="0.5" stroke-dasharray="6 3"/>
+<text x="80" y="236" fill="#5DCAA5" font-size="14" font-weight="500">ECS Fargate task (4 vCPU, 8 GB)</text>
+<text x="80" y="254" fill="#1D9E75" font-size="12">All containers share localhost — awsvpc network mode</text>
+
+<rect x="80" y="275" width="110" height="50" rx="8" fill="#2c2c2a" stroke="#5f5e5a" stroke-width="0.5"/>
+<text x="135" y="294" text-anchor="middle" fill="#d3d1c7" font-size="14" font-weight="500">Zookeeper</text>
+<text x="135" y="312" text-anchor="middle" fill="#888780" font-size="12">:2181</text>
+
+<rect x="210" y="275" width="130" height="50" rx="8" fill="#4A1B0C" fill-opacity="0.5" stroke="#993C1D" stroke-width="0.5"/>
+<text x="275" y="294" text-anchor="middle" fill="#F0997B" font-size="14" font-weight="500">Kafka</text>
+<text x="275" y="312" text-anchor="middle" fill="#D85A30" font-size="12">:9092</text>
+
+<rect x="360" y="275" width="110" height="50" rx="8" fill="#26215C" fill-opacity="0.5" stroke="#534AB7" stroke-width="0.5"/>
+<text x="415" y="294" text-anchor="middle" fill="#AFA9EC" font-size="14" font-weight="500">Redis</text>
+<text x="415" y="312" text-anchor="middle" fill="#7F77DD" font-size="12">:6379</text>
+
+<line x1="190" y1="300" x2="208" y2="300" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<rect x="80" y="365" width="160" height="50" rx="8" fill="#412402" fill-opacity="0.5" stroke="#854F0B" stroke-width="0.5"/>
+<text x="160" y="384" text-anchor="middle" fill="#FAC775" font-size="14" font-weight="500">Ingest</text>
+<text x="160" y="402" text-anchor="middle" fill="#BA7517" font-size="12">OpenCV + Kafka</text>
+
+<line x1="240" y1="390" x2="265" y2="330" stroke="#D85A30" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="265" y="356" fill="#888780" font-size="12">raw-frames</text>
+
+<path d="M275 325 L275 360 L320 437" fill="none" stroke="#D85A30" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<rect x="240" y="440" width="180" height="50" rx="8" fill="#26215C" fill-opacity="0.5" stroke="#534AB7" stroke-width="0.5"/>
+<text x="330" y="459" text-anchor="middle" fill="#AFA9EC" font-size="14" font-weight="500">Inference worker</text>
+<text x="330" y="477" text-anchor="middle" fill="#7F77DD" font-size="12">YOLOv8 CPU</text>
+
+<path d="M330 490 L330 510 L275 510 L275 527" fill="none" stroke="#D85A30" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<rect x="210" y="530" width="130" height="40" rx="6" fill="#4A1B0C" fill-opacity="0.3" stroke="#993C1D" stroke-width="0.5"/>
+<text x="275" y="554" text-anchor="middle" fill="#D85A30" font-size="12">detections topic</text>
+
+<path d="M275 570 L275 590 L330 590 L330 602" fill="none" stroke="#D85A30" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<rect x="240" y="605" width="180" height="50" rx="8" fill="#173404" fill-opacity="0.5" stroke="#3B6D11" stroke-width="0.5"/>
+<text x="330" y="624" text-anchor="middle" fill="#C0DD97" font-size="14" font-weight="500">Aggregator</text>
+<text x="330" y="642" text-anchor="middle" fill="#639922" font-size="12">Reorder + REST :8080</text>
+
+<text x="490" y="400" fill="#888780" font-size="12">Ready for merge:</text>
+<text x="490" y="418" fill="#888780" font-size="12">Go gateway uses Redis :6379</text>
+<text x="490" y="436" fill="#888780" font-size="12">Go bridge uses Kafka :9092</text>
+<text x="490" y="454" fill="#888780" font-size="12">5 ECR repos pre-created</text>
+
+<line x1="470" y1="300" x2="488" y2="400" stroke="#5f5e5a" stroke-width="0.5" stroke-dasharray="3 3"/>
+<circle cx="470" cy="300" r="2" fill="#888780"/>
+
+<rect x="445" y="605" width="155" height="50" rx="8" fill="none" stroke="#5f5e5a" stroke-width="0.5" stroke-dasharray="4 3"/>
+<text x="522" y="624" text-anchor="middle" fill="#888780" font-size="12">Client (curl / browser)</text>
+<text x="522" y="642" text-anchor="middle" fill="#888780" font-size="12">GET :8080/stats</text>
+
+<line x1="445" y1="630" x2="422" y2="630" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+</svg>
