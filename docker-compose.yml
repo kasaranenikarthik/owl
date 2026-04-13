@@ -55,6 +55,57 @@ services:
       - pipeline
     restart: unless-stopped
 
+  triton-model-init:
+    build:
+      context: .
+      dockerfile: inference/Dockerfile
+    container_name: triton-model-init
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    env_file: .env.docker
+    command: ["python", "export_triton_repo.py"]
+    volumes:
+      - triton-model-repo:/models
+    networks:
+      - pipeline
+    restart: "no"
+
+  triton:
+    image: nvcr.io/nvidia/tritonserver:26.02-py3
+    container_name: triton
+    depends_on:
+      triton-model-init:
+        condition: service_completed_successfully
+    env_file: .env.docker
+    command: ["tritonserver", "--model-repository=/models"]
+    ports:
+      - "8004:8000"
+    volumes:
+      - triton-model-repo:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import os, urllib.request; model=os.environ.get('TRITON_MODEL_NAME', 'yolo'); urls=('http://localhost:8000/v2/health/ready', f'http://localhost:8000/v2/models/{model}/ready'); [urllib.request.urlopen(url, timeout=2).read() for url in urls]",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - pipeline
+    restart: unless-stopped
+
   inference:
     build:
       context: .
@@ -63,6 +114,8 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
+      triton:
+        condition: service_healthy
     env_file: .env.docker
     ports:
       - "8002:8002"
@@ -139,6 +192,7 @@ services:
 
 volumes:
   kafka-data:
+  triton-model-repo:
   prometheus-data:
   grafana-data:
 

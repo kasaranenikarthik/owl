@@ -2,10 +2,10 @@ import logging
 
 import cv2
 import numpy as np
-import torch
 
 from schemas.frame_message import FrameMessage
 from schemas.detection_message import BoundingBox, DetectionMessage
+from model import InferenceOutput
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +13,8 @@ INPUT_SIZE = 640
 
 
 class MicroBatcher:
-    def __init__(self, device: torch.device):
-        self.device = device
-
-    def prepare_batch(self, frames: list[FrameMessage]) -> np.ndarray:
-        """Decode JPEG frames and stack into a numpy array for YOLO."""
+    def prepare_batch(self, frames: list[FrameMessage]) -> list[np.ndarray]:
+        """Decode JPEG frames into images suitable for inference."""
         images = []
         for frame in frames:
             raw = frame.decode_data()
@@ -31,11 +28,12 @@ class MicroBatcher:
         return images
 
     def unpack_results(
-        self, results: list, frames: list[FrameMessage]
+        self, outputs: list[InferenceOutput], frames: list[FrameMessage]
     ) -> list[DetectionMessage]:
         """Map YOLO results back to DetectionMessage per frame."""
         detections = []
-        for result, frame in zip(results, frames):
+        for output, frame in zip(outputs, frames):
+            result = output.result
             boxes = []
             if result.boxes is not None:
                 for box in result.boxes:
@@ -57,7 +55,7 @@ class MicroBatcher:
                     frame_id=frame.frame_id,
                     timestamp=frame.timestamp,
                     detections=boxes,
-                    inference_time_ms=result.speed.get("inference", 0.0),
+                    inference_time_ms=output.inference_time_ms,
                 )
             )
         return detections

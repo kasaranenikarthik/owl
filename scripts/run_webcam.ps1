@@ -1,6 +1,6 @@
 param(
     [int]$CameraIndex = 0,
-    [string]$StreamId = "stream-0",
+    [string]$StreamId = "",
     [int]$FrameSkip = 1,
     [switch]$InstallDependencies
 )
@@ -67,6 +67,10 @@ $script:python = @(Resolve-PythonLauncher)
 Write-Host "Using Python launcher: $($script:python -join ' ')"
 
 Import-DotEnv ".env"
+
+if ([string]::IsNullOrWhiteSpace($StreamId)) {
+    $StreamId = "webcam-$CameraIndex"
+}
 
 $env:KAFKA_BROKER = "localhost:9092"
 $env:INGEST_SOURCE = "$CameraIndex"

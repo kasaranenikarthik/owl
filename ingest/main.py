@@ -17,13 +17,22 @@ logging.basicConfig(
 logger = logging.getLogger("ingest")
 
 
+def _default_stream_id(source: str) -> str:
+    try:
+        camera_index = int(source)
+        return f"webcam-{camera_index}"
+    except ValueError:
+        return "stream-0"
+
+
 def main():
     logger.info("Starting ingest service")
     start_metrics_server(port=8001)
 
+    stream_id = os.environ.get("STREAM_ID") or _default_stream_id(settings.ingest_source)
     publisher = FramePublisher(
         source=settings.ingest_source,
-        stream_id=os.environ.get("STREAM_ID", "stream-0"),
+        stream_id=stream_id,
     )
 
     def handle_signal(signum, frame):

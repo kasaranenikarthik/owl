@@ -31,10 +31,18 @@ logger = logging.getLogger("viewer")
 # Shared state: latest annotated frame per stream
 # ---------------------------------------------------------------------------
 
-# frame_id -> decoded numpy frame
-_frame_buffer: dict[int, np.ndarray] = {}
-# frame_id -> DetectionMessage
-_detection_buffer: dict[int, DetectionMessage] = {}
+FrameKey = tuple[str, int]
+
+# (stream_id, frame_id) -> decoded numpy frame
+_frame_buffer: dict[FrameKey, np.ndarray] = {}
+# (stream_id, frame_id) -> DetectionMessage
+_detection_buffer: dict[FrameKey, DetectionMessage] = {}
+# latest decoded frame per stream_id
+_latest_frame: dict[str, np.ndarray] = {}
+# latest raw JPEG per stream_id
+_latest_raw: dict[str, bytes] = {}
+# latest detection per stream_id
+_latest_detection: dict[str, DetectionMessage] = {}
 # latest fully-annotated JPEG per stream_id
 _latest_annotated: dict[str, bytes] = {}
 
@@ -98,26 +106,38 @@ def _annotate(frame: np.ndarray, det: DetectionMessage) -> np.ndarray:
     return img
 
 
-def _try_match(frame_id: int, stream_id: str):
-    """If both frame and detection exist for frame_id, annotate and store."""
-    if frame_id in _frame_buffer and frame_id in _detection_buffer:
-        frame = _frame_buffer.pop(frame_id)
-        det = _detection_buffer.pop(frame_id)
-        annotated = _annotate(frame, det)
-        _, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        _latest_annotated[stream_id] = jpeg.tobytes()
+def _frame_key(stream_id: str, frame_id: int) -> FrameKey:
+    return (stream_id, frame_id)
+
+
+def _try_match(stream_id: str, frame_id: int):
+    """If both frame and detection exist for a stream-local frame_id, annotate."""
+    key = _frame_key(stream_id, frame_id)
+    if key in _frame_buffer and key in _detection_buffer:
+        frame = _frame_buffer.pop(key)
+        det = _detection_buffer.pop(key)
+        _update_annotated(stream_id, frame, det)
+
+
+def _update_annotated(stream_id: str, frame: np.ndarray, det: DetectionMessage):
+    annotated = _annotate(frame, det)
+    _, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    _latest_annotated[stream_id] = jpeg.tobytes()
 
 
 def _evict_old_buffers():
     """Remove old entries to bound memory usage."""
     if len(_frame_buffer) > _BUFFER_MAX:
-        sorted_ids = sorted(_frame_buffer.keys())
-        for fid in sorted_ids[: len(sorted_ids) - _BUFFER_MAX // 2]:
-            _frame_buffer.pop(fid, None)
+        sorted_keys = sorted(_frame_buffer.keys(), key=lambda key: (key[1], key[0]))
+        for key in sorted_keys[: len(sorted_keys) - _BUFFER_MAX // 2]:
+            _frame_buffer.pop(key, None)
     if len(_detection_buffer) > _BUFFER_MAX:
-        sorted_ids = sorted(_detection_buffer.keys())
-        for fid in sorted_ids[: len(sorted_ids) - _BUFFER_MAX // 2]:
-            _detection_buffer.pop(fid, None)
+        sorted_keys = sorted(
+            _detection_buffer.keys(),
+            key=lambda key: (key[1], key[0]),
+        )
+        for key in sorted_keys[: len(sorted_keys) - _BUFFER_MAX // 2]:
+            _detection_buffer.pop(key, None)
 
 
 # ---------------------------------------------------------------------------
@@ -145,8 +165,13 @@ def _consume_frames():
                 if frame is None:
                     continue
                 with _lock:
-                    _frame_buffer[fm.frame_id] = frame
-                    _try_match(fm.frame_id, fm.stream_id)
+                    _latest_frame[fm.stream_id] = frame
+                    _latest_raw[fm.stream_id] = raw
+                    _frame_buffer[_frame_key(fm.stream_id, fm.frame_id)] = frame
+                    _try_match(fm.stream_id, fm.frame_id)
+                    latest_det = _latest_detection.get(fm.stream_id)
+                    if latest_det is not None:
+                        _update_annotated(fm.stream_id, frame, latest_det)
                     _evict_old_buffers()
                 consumer.commit(asynchronous=True)
             except Exception:
@@ -171,8 +196,12 @@ def _consume_detections():
             try:
                 det = DetectionMessage.deserialize(msg.value())
                 with _lock:
-                    _detection_buffer[det.frame_id] = det
-                    _try_match(det.frame_id, det.stream_id)
+                    _latest_detection[det.stream_id] = det
+                    _detection_buffer[_frame_key(det.stream_id, det.frame_id)] = det
+                    _try_match(det.stream_id, det.frame_id)
+                    latest_frame = _latest_frame.get(det.stream_id)
+                    if latest_frame is not None:
+                        _update_annotated(det.stream_id, latest_frame, det)
                     _evict_old_buffers()
                 consumer.commit(asynchronous=True)
             except Exception:
@@ -199,7 +228,7 @@ def _mjpeg_generator(stream_id: str):
     """Yield MJPEG frames for the given stream."""
     while True:
         with _lock:
-            jpeg = _latest_annotated.get(stream_id)
+            jpeg = _latest_annotated.get(stream_id) or _latest_raw.get(stream_id)
         if jpeg is not None:
             yield (
                 b"--frame\r\n"
@@ -276,6 +305,7 @@ def index():
         <img id="feed" alt="Waiting for stream..." />
     </div>
     <div class="status" id="status">Not connected</div>
+    <div class="status">Raw frames appear first. Detection boxes appear once inference starts publishing.</div>
     <script>
         function connect() {
             const sid = document.getElementById('sid').value;
@@ -293,4 +323,10 @@ def index():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "streams": list(_latest_annotated.keys())}
+    streams = sorted(set(_latest_raw.keys()) | set(_latest_annotated.keys()))
+    return {
+        "status": "ok",
+        "streams": streams,
+        "detection_streams": sorted(_latest_detection.keys()),
+        "annotated_streams": sorted(_latest_annotated.keys()),
+    }

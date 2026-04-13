@@ -1,11 +1,15 @@
 """Smoke test: verifies all services are up and responding."""
 
+import os
 import sys
 import time
+
 import requests
 
 
 BASE_URL = "http://localhost:8080"
+TRITON_BASE_URL = "http://localhost:8004"
+TRITON_MODEL_NAME = os.environ.get("TRITON_MODEL_NAME", "yolo")
 METRICS_ENDPOINTS = [
     ("ingest", "http://localhost:8001"),
     ("inference", "http://localhost:8002"),
@@ -35,6 +39,24 @@ def check_metrics(name: str, url: str) -> bool:
         return False
 
 
+def check_triton_readiness() -> bool:
+    endpoints = [
+        f"{TRITON_BASE_URL}/v2/health/ready",
+        f"{TRITON_BASE_URL}/v2/models/{TRITON_MODEL_NAME}/ready",
+    ]
+
+    try:
+        for url in endpoints:
+            r = requests.get(url, timeout=5)
+            if r.status_code != 200:
+                print(f"  FAIL Triton readiness ({url}): status={r.status_code}")
+                return False
+        return True
+    except Exception as e:
+        print(f"  FAIL Triton readiness: {e}")
+        return False
+
+
 def main():
     results = []
 
@@ -55,7 +77,13 @@ def main():
         results.append(("Streams API", False))
         print(f"  FAIL - {e}")
 
-    # 3. Metrics endpoints
+    # 3. Triton readiness
+    print("Checking Triton readiness...")
+    ok = check_triton_readiness()
+    results.append(("Triton readiness", ok))
+    print(f"  {'PASS' if ok else 'FAIL'}")
+
+    # 4. Metrics endpoints
     for name, url in METRICS_ENDPOINTS:
         print(f"Checking {name} metrics...")
         ok = check_metrics(name, url)

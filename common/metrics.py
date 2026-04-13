@@ -32,6 +32,24 @@ detections_published_total = Counter(
     "Total detection messages published",
 )
 
+triton_requests_total = Counter(
+    "triton_requests_total",
+    "Total Triton inference requests attempted by the bridge",
+    ["worker_id"],
+)
+
+triton_request_failures_total = Counter(
+    "triton_request_failures_total",
+    "Total Triton inference requests that failed in the bridge",
+    ["worker_id", "reason"],
+)
+
+triton_inflight_requests = Gauge(
+    "triton_inflight_requests",
+    "Current number of in-flight Triton requests per bridge worker",
+    ["worker_id"],
+)
+
 # --- Aggregator metrics ---
 detections_consumed_total = Counter(
     "detections_consumed_total",

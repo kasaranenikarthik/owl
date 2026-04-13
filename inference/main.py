@@ -18,7 +18,7 @@ from common.metrics import (
 )
 from consumer import FrameConsumer
 from batcher import MicroBatcher
-from model import YOLOInferenceEngine
+from model import create_inference_engine
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -33,14 +33,25 @@ def main():
     global running
 
     worker_id = os.environ.get("WORKER_ID", socket.gethostname())
-    logger.info("Starting inference worker: %s", worker_id)
+    logger.info(
+        "Starting inference worker: %s (backend=%s)",
+        worker_id,
+        settings.inference_backend,
+    )
 
     start_metrics_server(port=8002)
 
-    engine = YOLOInferenceEngine(settings.yolo_model_path)
-    batcher = MicroBatcher(device=engine.device)
+    engine = create_inference_engine(worker_id=worker_id)
+    batcher = MicroBatcher()
     consumer = FrameConsumer()
     producer = create_producer(settings.kafka_broker)
+
+    if settings.use_triton:
+        max_size = settings.triton_max_inflight
+        timeout_ms = settings.triton_collect_timeout_ms
+    else:
+        max_size = settings.batch_size
+        timeout_ms = settings.batch_timeout_ms
 
     def handle_signal(signum, frame):
         global running
@@ -51,17 +62,17 @@ def main():
     signal.signal(signal.SIGINT, handle_signal)
 
     logger.info(
-        "Consuming from %s (batch_size=%d, timeout=%dms)",
+        "Consuming from %s (window_size=%d, timeout=%dms)",
         settings.frames_topic,
-        settings.batch_size,
-        settings.batch_timeout_ms,
+        max_size,
+        timeout_ms,
     )
 
     try:
         while running:
             frames = consumer.poll_batch(
-                max_size=settings.batch_size,
-                timeout_ms=settings.batch_timeout_ms,
+                max_size=max_size,
+                timeout_ms=timeout_ms,
             )
 
             if not frames:
@@ -74,13 +85,29 @@ def main():
             images = batcher.prepare_batch(frames)
 
             start = time.monotonic()
-            results = engine.infer(images)
+            try:
+                outputs = engine.infer(images)
+            except Exception:
+                logger.exception(
+                    "Inference failed for %d frame(s); leaving offsets uncommitted",
+                    len(frames),
+                )
+                continue
             elapsed = time.monotonic() - start
+
+            if len(outputs) != len(frames):
+                logger.error(
+                    "Inference output count mismatch: expected %d, got %d; "
+                    "leaving offsets uncommitted",
+                    len(frames),
+                    len(outputs),
+                )
+                continue
 
             inference_duration_seconds.labels(worker_id=worker_id).observe(elapsed)
 
             # Unpack and publish detections
-            detection_msgs = batcher.unpack_results(results, frames)
+            detection_msgs = batcher.unpack_results(outputs, frames)
             for det in detection_msgs:
                 producer.produce(
                     topic=settings.detections_topic,
@@ -90,13 +117,20 @@ def main():
                 )
                 detections_published_total.inc()
 
-            producer.poll(0)
+            remaining = producer.flush(timeout=5)
+            if remaining:
+                logger.error(
+                    "Failed to publish %d detection message(s); leaving offsets uncommitted",
+                    remaining,
+                )
+                continue
 
             # Commit after successful processing
             consumer.commit()
 
     finally:
         logger.info("Shutting down inference worker")
+        engine.close()
         producer.flush(timeout=5)
         consumer.close()
 

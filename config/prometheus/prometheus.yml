@@ -11,6 +11,10 @@ scrape_configs:
     static_configs:
       - targets: ["inference:8002"]
 
+  - job_name: triton
+    static_configs:
+      - targets: ["triton:8002"]
+
   - job_name: aggregator
     static_configs:
       - targets: ["aggregator:8003"]

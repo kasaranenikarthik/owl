@@ -5,9 +5,9 @@
 
 ## 1. System Overview
 
-This system processes live video streams in real-time using horizontally scalable GPU inference workers. It extracts frames from video sources, runs YOLOv8 object detection via Kafka-distributed GPU workers, and delivers ordered detection results through REST and WebSocket APIs.
+This system processes live video streams in real-time using horizontally scalable GPU inference workers. It extracts frames from video sources, routes them through Kafka to an inference bridge, performs YOLOv8 object detection through NVIDIA Triton Inference Server, and delivers ordered detection results through REST and WebSocket APIs.
 
-**Current test results:** Processing 1920x1080 @ 30fps traffic video, detecting cars, motorcycles, and people with ~14ms inference latency per frame on a single GPU worker.
+**Baseline before Triton rollout:** Processing 1920x1080 @ 30fps traffic video, detecting cars, motorcycles, and people with ~14ms inference latency per frame on a single GPU worker.
 
 ---
 
@@ -17,28 +17,25 @@ This system processes live video streams in real-time using horizontally scalabl
                         DISTRIBUTED VIDEO INFERENCE PIPELINE
                         ====================================
 
-  Video Source(s)                 Kafka Cluster                   Consumers
-  ===============          =========================         ==================
+  Video Source(s)                 Kafka Cluster                 Bridge + Serving
+  ===============          =========================         =====================
 
   +-------------+          +----------------------+
   | RTSP Stream |          |   video.frames       |
-  | MP4 File    |---+--->  |   (6 partitions)     |---+---> +----------------+
-  | Webcam      |   |      |   key = stream_id    |   |     | GPU Worker 1   |
-  +-------------+   |      +----------------------+   |     | (YOLOv8 + CUDA)|
-                    |                                  |     +-------+--------+
-  +-------------+   |                                  |             |
-  | Ingest Svc  |---+                                  +---> +-------+--------+
-  | (OpenCV +   |                                      |     | GPU Worker 2   |
-  |  Kafka Pub) |                                      |     | (YOLOv8 + CUDA)|
-  +-------------+                                      |     +-------+--------+
-       |                                               |             |
-       | Prometheus                                    +---> +-------+--------+
-       | :8001                                               | GPU Worker N   |
-                                                             | (YOLOv8 + CUDA)|
-                                                             +-------+--------+
-                                                                     |
-                                                                     | publish
-                                                                     v
+  | MP4 File    |---+--->  |   (6 partitions)     |---+---> +-------------------+
+  | Webcam      |   |      |   key = stream_id    |         | Inference Bridge   |
+  +-------------+   |      +----------------------+         | (Kafka -> Triton)  |
+                    |                                       +---------+---------+
+  +-------------+   |                                                 |
+  | Ingest Svc  |---+                                                 | HTTP
+  | (OpenCV +   |                                                     v
+  |  Kafka Pub) |                                         +---------------------+
+  +-------------+                                         | Triton Server       |
+       |                                                  | (YOLOv8 ONNX model) |
+       | Prometheus                                       +----------+----------+
+       | :8001                                                       |
+       |                                                             | publish
+       |                                                             v
                                                         +----------------------+
                                                         |  video.detections    |
                                                         |  (6 partitions)      |
@@ -73,6 +70,7 @@ This system processes live video streams in real-time using horizontally scalabl
   |   Prometheus     |<------| Scrape targets:  |
   |   :9090          |       |  ingest:8001     |
   |                  |       |  inference:8002  |
+  |                  |       |  triton:8002     |
   +--------+---------+       |  aggregator:8003 |
            |                 |  aggregator:8080 |
            v                 +------------------+
@@ -113,10 +111,13 @@ Frame Lifecycle:
   Base64 decode --> JPEG decode --> numpy array
        |
        v
-  Micro-batch (up to 8 frames or 50ms timeout)
+  Collect up to N frames for the bridge dispatch window
        |
        v
-  YOLOv8 inference (GPU batch predict)
+  Per-frame HTTP inference requests to Triton
+       |
+       v
+  Triton dynamic batching (preferred batch sizes 4 or 8, max queue delay 50ms)
        |
        v
   Unpack results --> DetectionMessage per frame
@@ -158,16 +159,19 @@ Frame Lifecycle:
 |----------------|------------------------------------------------|
 | Base image     | `pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime`|
 | Metrics port   | 8002                                           |
-| Model          | YOLOv8n (6.2MB, auto-downloaded)               |
-| Device         | CUDA (auto-fallback to CPU)                    |
+| Default backend| Triton HTTP bridge                             |
+| Fallback       | Local YOLOv8 inference via Ultralytics         |
+| Model serving  | Triton + ONNX model repository                 |
 | Consumer group | `inference-workers`                            |
-| Batch strategy | Up to 8 frames OR 50ms timeout                 |
-| Commit         | Manual, after successful publish                |
+| Dispatch window| Up to `TRITON_MAX_INFLIGHT` frames OR `TRITON_COLLECT_TIMEOUT_MS` |
+| Triton batching| Dynamic batching in Triton (`[4,8]`, 50ms queue delay) |
+| Commit         | Manual, after successful publish               |
 
 **Key files:**
-- `inference/consumer.py` - Micro-batch polling with deadline
-- `inference/batcher.py` - Frame decode + YOLO result unpacking
-- `inference/model.py` - YOLO wrapper with warm-up inference
+- `inference/consumer.py` - Polling windows from Kafka
+- `inference/batcher.py` - Frame decode + detection unpacking
+- `inference/model.py` - Backend selection, local YOLO, and Triton bridge client
+- `inference/export_triton_repo.py` - ONNX export + Triton model repository bootstrap
 
 ### 4.3 Aggregator Service
 
@@ -215,6 +219,9 @@ Frame Lifecycle:
 | `inference_duration_seconds`  | Histogram | worker_id   | inference  |
 | `batch_size_actual`           | Histogram | -           | inference  |
 | `detections_published_total`  | Counter   | -           | inference  |
+| `triton_requests_total`       | Counter   | worker_id   | inference  |
+| `triton_request_failures_total` | Counter | worker_id, reason | inference |
+| `triton_inflight_requests`    | Gauge     | worker_id   | inference  |
 | `detections_consumed_total`   | Counter   | -           | aggregator |
 | `reorder_buffer_size`         | Gauge     | stream_id   | aggregator |
 | `websocket_connections`       | Gauge     | -           | aggregator |
@@ -277,15 +284,16 @@ Frame Lifecycle:
 
 **What we give up:** Higher latency than in-process queues. Base64+JSON encoding adds ~33% overhead vs raw bytes. For a production system, Avro/Protobuf with a schema registry would reduce this.
 
-### 6.2 Micro-Batching Strategy
+### 6.2 Triton Dispatch + Dynamic Batching Strategy
 
-| Aspect          | Decision                              | Tradeoff                                               |
-|-----------------|---------------------------------------|--------------------------------------------------------|
-| **Batch size**  | Up to 8 frames                        | GPU efficiency vs memory usage                         |
-| **Timeout**     | 50ms max wait                         | Bounds tail latency; may send small batches under low load |
-| **Fill policy** | Whichever comes first (size or timeout) | Under high load: full batches, high throughput. Under low load: fast response, lower GPU utilization |
+| Aspect             | Decision                                      | Tradeoff                                               |
+|--------------------|-----------------------------------------------|--------------------------------------------------------|
+| **Dispatch window**| Up to `TRITON_MAX_INFLIGHT` frames            | Controls bridge concurrency and request fan-out        |
+| **Collect timeout**| `TRITON_COLLECT_TIMEOUT_MS`                   | Bounds bridge wait time under low input volume         |
+| **Triton batching**| Preferred batch sizes `[4, 8]`                | Better GPU efficiency without Python-side model batches |
+| **Queue delay**    | `TRITON_DYNAMIC_BATCH_DELAY_US=50000`         | Lets Triton coalesce requests, but adds queueing delay |
 
-**Why this matters for experiments:** Experiment 2 directly varies these parameters to find the sweet spot between GPU utilization and tail latency.
+**Why this matters for experiments:** Experiment 2 now tunes both bridge concurrency and Triton dynamic batching to find the throughput/latency sweet spot.
 
 ### 6.3 Ordering Guarantees
 
@@ -355,7 +363,7 @@ Frame Lifecycle:
 
 3. **Single partition per stream:** All frames from one stream go to one partition, processed by one worker. A high-FPS stream can't be parallelized across workers (without breaking ordering at the Kafka level).
 
-4. **No model caching:** The YOLO model is downloaded fresh on every container restart. Should mount a persistent volume for `/app/yolov8n.pt`.
+4. **Cold-start model export:** The Triton repository is persisted in a named volume, but the first boot still has to export the YOLO model to ONNX before Triton can load it.
 
 5. **No authentication:** All API endpoints and WebSocket connections are unauthenticated. Acceptable for local experimentation only.
 
@@ -371,13 +379,15 @@ CONTAINER        IMAGE                                      PORTS              G
 kafka            bitnamilegacy/kafka:4.0.0-debian-12-r10    9092               -
 kafka-init       bitnamilegacy/kafka:4.0.0-debian-12-r10    (exits after init) -
 ingest           python:3.12-slim + ffmpeg + OpenCV          8001               -
-inference        pytorch:2.2.0-cuda12.1 + ultralytics       8002               1x NVIDIA
+triton-model-init pytorch:2.2.0-cuda12.1 + ultralytics      (exits after init) -
+triton           nvcr.io/nvidia/tritonserver:26.02-py3      8004(host), 8002   1x NVIDIA
+inference        pytorch:2.2.0-cuda12.1 + ultralytics       8002               optional
 aggregator       python:3.12-slim + FastAPI                  8080, 8003         -
 prometheus       prom/prometheus:v2.51.0                     9090               -
 grafana          grafana/grafana:10.4.0                      3000               -
 ```
 
-**Volumes:** `kafka-data`, `prometheus-data`, `grafana-data` (named Docker volumes)
+**Volumes:** `kafka-data`, `triton-model-repo`, `prometheus-data`, `grafana-data` (named Docker volumes)
 **Network:** `pipeline` (bridge)
 
 ---
