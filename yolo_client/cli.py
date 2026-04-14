@@ -91,7 +91,6 @@ async def run_pipeline(args):
     # Connect to server
     await client.connect()
     print(f"Connected as {client.client_id}")
-    print("Press 'q' in the preview window to quit (or Ctrl+C)\n")
 
     # Run WebSocket send/recv loops in background
     ws_task = asyncio.create_task(client.run())
@@ -99,6 +98,26 @@ async def run_pipeline(args):
     target_fps = args.fps
     frame_interval = 1.0 / target_fps
     show_preview = not args.headless
+
+    def disable_preview(exc: cv2.error):
+        nonlocal show_preview
+        if not show_preview:
+            return
+        show_preview = False
+        logger.warning(
+            "Preview window unavailable; continuing in headless mode. "
+            "Use --headless to silence this warning or replace "
+            "opencv-python-headless with opencv-python for local preview "
+            "support. OpenCV error: %s",
+            exc,
+        )
+        print("Preview unavailable; continuing in headless mode. Press Ctrl+C to quit.\n")
+
+    if show_preview:
+        print("Press 'q' in the preview window to quit (or Ctrl+C).")
+        print("If the OpenCV GUI backend is unavailable, the client will continue headless.\n")
+    else:
+        print("Running headless. Press Ctrl+C to quit.\n")
 
     try:
         while True:
@@ -124,9 +143,12 @@ async def run_pipeline(args):
                     draw_detections(frame, current_result)
                     draw_overlay(frame, current_result, client.stats)
 
-                cv2.imshow("YOLO Realtime", frame)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
+                try:
+                    cv2.imshow("YOLO Realtime", frame)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
+                except cv2.error as exc:
+                    disable_preview(exc)
             else:
                 # Headless — print stats periodically
                 if client.stats.results_received % 30 == 0 and client.stats.results_received > 0:
@@ -149,7 +171,10 @@ async def run_pipeline(args):
     finally:
         source.release()
         if show_preview:
-            cv2.destroyAllWindows()
+            try:
+                cv2.destroyAllWindows()
+            except cv2.error as exc:
+                logger.debug("Ignoring OpenCV window cleanup failure: %s", exc)
         await client.close()
         ws_task.cancel()
 
