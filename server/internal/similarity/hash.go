@@ -5,9 +5,9 @@
 package similarity
 
 import (
-	"image"
-
-	"gocv.io/x/gocv"
+	"bytes"
+	"fmt"
+	"image/jpeg"
 )
 
 // AverageHash computes a 64-bit perceptual hash of a JPEG image.
@@ -51,29 +51,26 @@ func HammingDistance(a, b uint64) int {
 
 // decodeAndResize converts JPEG bytes to an 8x8 grayscale pixel array.
 func decodeAndResize(jpegData []byte, w, h int) ([]uint8, error) {
-	// Using gocv for fast JPEG decode + resize
-	mat, err := gocvIMDecode(jpegData)
+	img, err := jpeg.Decode(bytes.NewReader(jpegData))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode jpeg: %w", err)
 	}
-	return mat, nil
-}
 
-// gocvIMDecode wraps gocv operations.
-func gocvIMDecode(data []byte) ([]uint8, error) {
-	// Import is in the build file — here's the logic:
-	mat, err := gocv.IMDecode(data, gocv.IMReadGrayScale)
-	if err != nil {
-		return nil, err
+	b := img.Bounds()
+	if b.Dx() == 0 || b.Dy() == 0 {
+		return nil, fmt.Errorf("invalid image dimensions")
 	}
-	resized := gocv.NewMat()
-	gocv.Resize(mat, &resized, image.Pt(8, 8), 0, 0, gocv.InterpolationLinear)
-	pixels := make([]uint8, 64)
-	for y := 0; y < 8; y++ {
-		for x := 0; x < 8; x++ {
-			pixels[y*8+x] = resized.GetUCharAt(y, x)
+
+	pixels := make([]uint8, w*h)
+	for y := 0; y < h; y++ {
+		sy := b.Min.Y + ((y*2+1)*b.Dy())/(2*h)
+		for x := 0; x < w; x++ {
+			sx := b.Min.X + ((x*2+1)*b.Dx())/(2*w)
+			r, g, b, _ := img.At(sx, sy).RGBA()
+			gray := (299*r + 587*g + 114*b) / 1000
+			pixels[y*w+x] = uint8(gray >> 8)
 		}
 	}
-	return pixels, nil
 
+	return pixels, nil
 }

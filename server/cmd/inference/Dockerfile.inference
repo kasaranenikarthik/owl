@@ -1,0 +1,36 @@
+FROM golang:1.25.5-bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       build-essential \
+       cmake \
+       git \
+       pkg-config \
+       libgtk-3-dev \
+       libavcodec-dev \
+       libavformat-dev \
+       libswscale-dev \
+       ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build OpenCV + contrib with symbols expected by gocv
+WORKDIR /opt
+RUN git clone https://github.com/opencv/opencv.git \
+    && git clone https://github.com/opencv/opencv_contrib.git
+
+WORKDIR /opt/opencv/build
+RUN cmake -DOPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib/modules \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local .. \
+    && make -j$(nproc) \
+    && make install
+
+WORKDIR /app
+COPY go.mod ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=1 go build -o /usr/local/bin/inference ./cmd/inference
+
+EXPOSE 9090
+ENTRYPOINT ["/usr/local/bin/inference"]
