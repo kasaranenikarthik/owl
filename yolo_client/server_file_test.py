@@ -27,8 +27,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 async def make_handler(expected_path: str):
-    async def handler(ws):
-        if ws.request.path != expected_path:
+    async def handler(ws, path=None):
+        # Compatibility across websockets versions:
+        # - legacy API may pass `path` as a second arg
+        # - some versions expose `ws.path`
+        # - newer APIs may expose `ws.request.path`
+        actual_path = (
+            path
+            or getattr(ws, "path", None)
+            or getattr(getattr(ws, "request", None), "path", None)
+        )
+
+        if actual_path != expected_path:
             await ws.close(code=1008, reason="invalid path")
             return
 
