@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/color"
+	"image/jpeg"
 	"log/slog"
 	"math"
 	"os"
@@ -19,7 +22,7 @@ import (
 	"yolo-realtime/internal/shutdown"
 	"yolo-realtime/internal/triton"
 
-	"gocv.io/x/gocv"
+	"golang.org/x/image/draw"
 )
 
 var cocoClasses = []string{
@@ -248,14 +251,18 @@ type inferenceClient struct {
 func (ic *inferenceClient) Infer(ctx context.Context, jpegData []byte) ([]models.Detection, float64, error) {
 	start := time.Now()
 
-	mat, err := gocv.IMDecode(jpegData, gocv.IMReadColor)
+	// Decode JPEG
+	img, err := jpeg.Decode(bytes.NewReader(jpegData))
 	if err != nil {
 		return nil, 0, fmt.Errorf("decode: %w", err)
 	}
-	defer mat.Close()
 
-	origW, origH := float32(mat.Cols()), float32(mat.Rows())
-	inputData := preprocess(mat)
+	bounds := img.Bounds()
+	origW, origH := float32(bounds.Dx()), float32(bounds.Dy())
+	inputData, err := preprocess(img)
+	if err != nil {
+		return nil, 0, fmt.Errorf("preprocess: %w", err)
+	}
 
 	output, err := ic.client.Infer(inputData, 1, 3, inputH, inputW)
 	if err != nil {
@@ -273,30 +280,25 @@ func (ic *inferenceClient) Close() { ic.client.Close() }
 // Preprocessing
 // ---------------------------------------------------------------------------
 
-func preprocess(mat gocv.Mat) []float32 {
-	resized := gocv.NewMat()
-	defer resized.Close()
-	gocv.Resize(mat, &resized, image.Pt(inputW, inputH), 0, 0, gocv.InterpolationLinear)
+func preprocess(img image.Image) ([]float32, error) {
+	// Resize to input dimensions
+	resized := image.NewRGBA(image.Rect(0, 0, inputW, inputH))
+	draw.BiLinear.Scale(resized, resized.Bounds(), img, img.Bounds(), draw.Over, nil)
 
-	rgb := gocv.NewMat()
-	defer rgb.Close()
-	gocv.CvtColor(resized, &rgb, gocv.ColorBGRToRGB)
-
-	fMat := gocv.NewMat()
-	defer fMat.Close()
-	rgb.ConvertFoWithParams(&fMat, gocv.MatTypeCV32FC3, 1.0/255.0, 0)
-
+	// Convert to float32 array (normalized 0-1, channels first: R, G, B)
 	data := make([]float32, 3*inputH*inputW)
 	for y := 0; y < inputH; y++ {
 		for x := 0; x < inputW; x++ {
-			px := fMat.GetVecfAt(y, x)
+			// Get RGBA values (scaled to 0-65535)
+			r, g, b, _ := resized.At(x, y).(color.RGBA).RGBA()
+			// Convert back to 0-255 range and normalize to 0-1
 			idx := y*inputW + x
-			data[0*inputH*inputW+idx] = px[0]
-			data[1*inputH*inputW+idx] = px[1]
-			data[2*inputH*inputW+idx] = px[2]
+			data[0*inputH*inputW+idx] = float32(r>>8) / 255.0
+			data[1*inputH*inputW+idx] = float32(g>>8) / 255.0
+			data[2*inputH*inputW+idx] = float32(b>>8) / 255.0
 		}
 	}
-	return data
+	return data, nil
 }
 
 // ---------------------------------------------------------------------------

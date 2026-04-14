@@ -1,29 +1,20 @@
-// =============================================================================
-// models/yolov8s/config.pbtxt  (Triton model config)
-// =============================================================================
-
 name: "yolov8s"
 platform: "onnxruntime_onnx"
-max_batch_size: 8
+max_batch_size: 0
 
 input [{
   name: "images"
   data_type: TYPE_FP32
-  dims: [3, 640, 640]
+  dims: [1, 3, 640, 640]
  }]
 
 output [{
    name: "output0"
    data_type: TYPE_FP32
-   dims: [84, 8400]
+   dims: [1, 84, 8400]
 }]
-
-dynamic_batching {
-  preferred_batch_size: [4, 8]
-  max_queue_delay_microseconds: 10000
-}
 
 instance_group [{
   count: 1
-  kind: KIND_GPU
+  kind: KIND_CPU
 }]

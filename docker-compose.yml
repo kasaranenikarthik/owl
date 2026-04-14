@@ -37,21 +37,24 @@ services:
     container_name: owl-kafka-init
     depends_on:
       - kafka
-    entrypoint: ["/bin/bash", "-lc"]
-    command: |
-      for i in {1..30}; do
-        kafka-topics --bootstrap-server kafka:9092 --list && break
-        sleep 2
-      done
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic frames --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic detections --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --list
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        for i in {1..30}; do
+          kafka-topics --bootstrap-server kafka:9092 --list && break
+          sleep 2
+        done
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic frames --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic detections --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --list
     networks:
       - owl
 
   kafka-exporter:
     image: danielqsj/kafka-exporter:v1.7.0
     container_name: owl-kafka-exporter
+    restart: unless-stopped
     depends_on:
       - kafka
     command:
@@ -70,18 +73,23 @@ services:
       - owl
 
   model-loader:
-    image: alpine:3.20
+    image: python:3.11-slim
     container_name: owl-model-loader
     command:
-      - /bin/sh
+      - /bin/bash
       - -lc
       - |
         set -e
-        apk add --no-cache wget
+        apt-get update && apt-get install -y --no-install-recommends wget ca-certificates libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libx11-6 libxcb1 && rm -rf /var/lib/apt/lists/*
+        python -m pip install --no-cache-dir "torch<2.6" "torchvision<0.21" ultralytics==8.1.0 onnx onnxruntime
         mkdir -p /models/yolov8s/1
         cp /repo/server/internal/models/yolov8s/config.pbtxt /models/yolov8s/config.pbtxt
-        wget -q -O /models/yolov8s/1/model.onnx https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8s.onnx
-        ls -R /models/yolov8s
+        echo "Downloading YOLOv8s weights from ultralytics/assets v8.1.0..."
+        wget -O /tmp/yolov8s.pt https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8s.pt
+        echo "Exporting ONNX model..."
+        python -c "from ultralytics import YOLO; YOLO('/tmp/yolov8s.pt').export(format='onnx', imgsz=640, opset=12, simplify=False)"
+        cp /tmp/yolov8s.onnx /models/yolov8s/1/model.onnx
+        ls -lh /models/yolov8s/1/
     volumes:
       - model_repo:/models
       - ./:/repo:ro
@@ -97,9 +105,8 @@ services:
     command:
       - tritonserver
       - --model-repository=/models
-      - --strict-model-config=true
+      - --strict-model-config=false
       - --allow-metrics=true
-      - --allow-gpu-metrics=true
       - --metrics-port=8002
     volumes:
       - model_repo:/models:ro
@@ -107,13 +114,6 @@ services:
       - "8000:8000"
       - "8001:8001"
       - "18002:8002"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     networks:
       - owl
 
@@ -122,6 +122,7 @@ services:
       context: ./server
       dockerfile: ./cmd/gateway/Dockerfile.gateway
     container_name: owl-gateway
+    restart: unless-stopped
     depends_on:
       - kafka
       - redis
@@ -148,6 +149,7 @@ services:
       context: ./server
       dockerfile: ./cmd/inference/Dockerfile.inference
     container_name: owl-inference
+    restart: unless-stopped
     depends_on:
       - kafka
       - triton
@@ -197,23 +199,6 @@ services:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-    networks:
-      - owl
-
-  yolo-client:
-    build:
-      context: ./yolo_client
-      dockerfile: Dockerfile
-    container_name: owl-yolo-client
-    depends_on:
-      - gateway
-    profiles:
-      - client
-    command: ["python", "cli.py", "--help"]
-    environment:
-      PYTHONUNBUFFERED: "1"
-    volumes:
-      - ./data:/data
     networks:
       - owl
 
