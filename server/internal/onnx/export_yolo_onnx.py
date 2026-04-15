@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable ONNX graph simplification during export.",
     )
+    parser.add_argument(
+        "--dynamic-batch",
+        action="store_true",
+        help="Export ONNX with dynamic batch dimension for Triton batching.",
+    )
     return parser.parse_args()
 
 
@@ -133,6 +138,7 @@ def main() -> int:
             imgsz=args.imgsz,
             opset=args.opset,
             simplify=args.simplify,
+            dynamic=args.dynamic_batch,
         )
     )
 
