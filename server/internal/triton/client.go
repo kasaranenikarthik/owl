@@ -36,7 +36,7 @@ func NewClient(baseURL, modelName string, logger *slog.Logger) (*Client, error) 
 		logger: logger,
 	}
 
-	if err := c.waitForReady(10 * time.Second); err != nil {
+	if err := c.waitForReady(60 * time.Second); err != nil {
 		return nil, err
 	}
 

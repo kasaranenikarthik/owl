@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
-	"image/color"
 	"image/jpeg"
 	"log/slog"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -285,17 +285,22 @@ func preprocess(img image.Image) ([]float32, error) {
 	resized := image.NewRGBA(image.Rect(0, 0, inputW, inputH))
 	draw.BiLinear.Scale(resized, resized.Bounds(), img, img.Bounds(), draw.Over, nil)
 
-	// Convert to float32 array (normalized 0-1, channels first: R, G, B)
+	// Convert to float32 array (normalized 0-1, channels first: R, G, B).
+	// Use direct RGBA pixel buffer access to avoid per-pixel interface calls.
 	data := make([]float32, 3*inputH*inputW)
+	stride := resized.Stride
+	pix := resized.Pix
 	for y := 0; y < inputH; y++ {
+		row := y * stride
 		for x := 0; x < inputW; x++ {
-			// Get RGBA values (scaled to 0-65535)
-			r, g, b, _ := resized.At(x, y).(color.RGBA).RGBA()
-			// Convert back to 0-255 range and normalize to 0-1
+			off := row + x*4
+			r := pix[off+0]
+			g := pix[off+1]
+			b := pix[off+2]
 			idx := y*inputW + x
-			data[0*inputH*inputW+idx] = float32(r>>8) / 255.0
-			data[1*inputH*inputW+idx] = float32(g>>8) / 255.0
-			data[2*inputH*inputW+idx] = float32(b>>8) / 255.0
+			data[0*inputH*inputW+idx] = float32(r) / 255.0
+			data[1*inputH*inputW+idx] = float32(g) / 255.0
+			data[2*inputH*inputW+idx] = float32(b) / 255.0
 		}
 	}
 	return data, nil
@@ -355,13 +360,7 @@ func postprocess(out []float32, origW, origH, confThresh float32) []models.Detec
 }
 
 func nms(dets []rawDet, thresh float32) []rawDet {
-	for i := range dets {
-		for j := i + 1; j < len(dets); j++ {
-			if dets[j].conf > dets[i].conf {
-				dets[i], dets[j] = dets[j], dets[i]
-			}
-		}
-	}
+	sort.Slice(dets, func(i, j int) bool { return dets[i].conf > dets[j].conf })
 	supp := make([]bool, len(dets))
 	var kept []rawDet
 	for i := range dets {

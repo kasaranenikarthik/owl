@@ -163,11 +163,11 @@ spec:
           args:
             - |
               apk add --no-cache wget
-              mkdir -p /models/yolov8s/1
-              wget -q -O /models/yolov8s/1/model.onnx \
-                https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8s.onnx
-              cat > /models/yolov8s/config.pbtxt << 'EOF'
-              name: "yolov8s"
+              mkdir -p /models/yolov8n/1
+              wget -q -O /models/yolov8n/1/model.onnx \
+                https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8n.onnx
+              cat > /models/yolov8n/config.pbtxt << 'EOF'
+              name: "yolov8n"
               platform: "onnxruntime_onnx"
               max_batch_size: 8
               input [{

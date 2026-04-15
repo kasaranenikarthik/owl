@@ -36,6 +36,7 @@ class Detection:
 
 @dataclass
 class FrameResult:
+    frame_id: int
     detections: list[Detection]
     inference_ms: float
     from_cache: bool
@@ -45,6 +46,7 @@ class FrameResult:
 @dataclass
 class Stats:
     frames_sent: int = 0
+    frames_dropped: int = 0
     results_received: int = 0
     cache_hits: int = 0
     total_inference_ms: float = 0.0
@@ -102,7 +104,9 @@ class RealtimeClient:
         self._ws = None
         self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=5)
         self._running = False
-        self._send_times: asyncio.Queue[float] = asyncio.Queue()
+        self._send_times: dict[int, float] = {}
+        self._sent_seq = 0
+        self._last_frame_id = 0
 
     async def connect(self):
         """Connect to the gateway WebSocket."""
@@ -128,7 +132,7 @@ class RealtimeClient:
             self._send_queue.put_nowait(jpeg_data)
             self.stats.frames_sent += 1
         except asyncio.QueueFull:
-            pass
+            self.stats.frames_dropped += 1
 
     async def run(self):
         """Run the send and receive loops concurrently."""
@@ -145,26 +149,44 @@ class RealtimeClient:
 
     async def _send_loop(self):
         """Send queued frames as binary WebSocket messages."""
+        if self._ws is None:
+            return
+        ws = self._ws
+
         while self._running:
             try:
                 data = await asyncio.wait_for(self._send_queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
 
-            self._send_times.put_nowait(time.monotonic())
-            await self._ws.send(data)
+            await ws.send(data)
+            self._sent_seq += 1
+            self._send_times[self._sent_seq] = time.monotonic()
 
     async def _recv_loop(self):
         """Receive JSON detection results from server.
         Server already drops stale results — client accepts everything."""
-        async for raw in self._ws:
+        if self._ws is None:
+            return
+        ws = self._ws
+
+        async for raw in ws:
             now = time.monotonic()
 
             data = json.loads(raw)
             if data.get("type") == "connected":
                 continue
 
+            frame_id = int(data.get("frame_id", 0))
+
+            if frame_id > 0:
+                if self._last_frame_id > 0 and frame_id > self._last_frame_id + 1:
+                    self.stats.frames_dropped += frame_id - self._last_frame_id - 1
+                if frame_id > self._last_frame_id:
+                    self._last_frame_id = frame_id
+
             result = FrameResult(
+                frame_id=frame_id,
                 detections=[
                     Detection(
                         x1=d["bounding_box"]["x1"],
@@ -187,12 +209,16 @@ class RealtimeClient:
             if result.from_cache:
                 self.stats.cache_hits += 1
 
-            try:
-                send_time = self._send_times.get_nowait()
+            send_time = self._send_times.pop(frame_id, None)
+            if send_time is not None:
                 e2e = (now - send_time) * 1000
                 self.stats.total_e2e_ms += e2e
-            except asyncio.QueueEmpty:
-                pass
+
+            # Cleanup in case old frames were dropped before a result arrived.
+            if frame_id > 0:
+                stale = [k for k in self._send_times if k < frame_id-300]
+                for k in stale:
+                    self._send_times.pop(k, None)
 
             if self.on_result:
                 self.on_result(result)

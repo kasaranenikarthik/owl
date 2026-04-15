@@ -183,9 +183,11 @@ func handleDetectionResult(ctx context.Context, value []byte, simCache *similari
 	}
 
 	clientResult := models.ClientResult{
+		FrameID:     internal.FrameID,
 		Detections:  internal.Detections,
 		InferenceMs: internal.InferenceMs,
 		FromCache:   false,
+		Timestamp:   internal.Timestamp,
 	}
 
 	return c.SendJSON(clientResult)
@@ -271,9 +273,11 @@ func processFrame(ctx context.Context, cfg config.Config, logger *slog.Logger, s
 			metrics.CacheHits.Inc()
 			c.latestSentID.Store(frameID)
 			clientResult := models.ClientResult{
+				FrameID:     frameID,
 				Detections:  cached.Detections,
 				InferenceMs: cached.InferenceMs,
 				FromCache:   true,
+				Timestamp:   now,
 			}
 			if err := c.SendJSON(clientResult); err != nil {
 				return fmt.Errorf("send cached result: %w", err)

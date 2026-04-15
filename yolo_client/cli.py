@@ -157,7 +157,8 @@ async def run_pipeline(args):
                         f"FPS: {s.fps:.1f} | "
                         f"Inference: {s.avg_inference_ms:.1f}ms | "
                         f"E2E: {s.avg_e2e_ms:.1f}ms | "
-                        f"Cache: {s.cache_hit_rate:.0f}%"
+                        f"Cache: {s.cache_hit_rate:.0f}% | "
+                        f"Dropped: {s.frames_dropped}"
                     )
 
             # Throttle to target FPS
@@ -182,6 +183,7 @@ async def run_pipeline(args):
     s = client.stats
     print(f"\n--- Session stats ---")
     print(f"Frames sent:     {s.frames_sent}")
+    print(f"Frames dropped:  {s.frames_dropped}")
     print(f"Results received: {s.results_received}")
     print(f"Avg FPS:         {s.fps:.1f}")
     print(f"Avg inference:   {s.avg_inference_ms:.1f}ms")

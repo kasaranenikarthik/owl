@@ -41,7 +41,9 @@ type InternalResult struct {
 
 // ClientResult is what the client receives over WebSocket.
 type ClientResult struct {
+	FrameID     uint64      `json:"frame_id"`
 	Detections  []Detection `json:"detections"`
 	InferenceMs float64     `json:"inference_ms"`
 	FromCache   bool        `json:"from_cache"`
+	Timestamp   time.Time   `json:"timestamp"`
 }

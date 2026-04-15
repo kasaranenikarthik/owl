@@ -54,15 +54,17 @@ func (c *Cache) CheckAndUpdate(ctx context.Context, clientID string, frameHash u
 
 	lastHashStr, err := c.client.Get(ctx, hashKey).Result()
 	if err == nil {
-		lastHash, _ := strconv.ParseUint(lastHashStr, 10, 64)
-		dist := HammingDistance(frameHash, lastHash)
+		lastHash, parseErr := strconv.ParseUint(lastHashStr, 10, 64)
+		if parseErr == nil {
+			dist := HammingDistance(frameHash, lastHash)
 
-		if dist <= c.threshold {
-			resultData, err := c.client.Get(ctx, resultKey).Result()
-			if err == nil {
-				var result models.InternalResult
-				if json.Unmarshal([]byte(resultData), &result) == nil {
-					return &result, true, nil
+			if dist <= c.threshold {
+				resultData, err := c.client.Get(ctx, resultKey).Result()
+				if err == nil {
+					var result models.InternalResult
+					if json.Unmarshal([]byte(resultData), &result) == nil {
+						return &result, true, nil
+					}
 				}
 			}
 		}
