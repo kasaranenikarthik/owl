@@ -47,6 +47,19 @@ const (
 	modelName = "yolov8s"
 )
 
+var (
+	rgbaPool = sync.Pool{
+		New: func() any {
+			return image.NewRGBA(image.Rect(0, 0, inputW, inputH))
+		},
+	}
+	inputTensorPool = sync.Pool{
+		New: func() any {
+			return make([]float32, 3*inputH*inputW)
+		},
+	}
+)
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -259,10 +272,11 @@ func (ic *inferenceClient) Infer(ctx context.Context, jpegData []byte) ([]models
 
 	bounds := img.Bounds()
 	origW, origH := float32(bounds.Dx()), float32(bounds.Dy())
-	inputData, err := preprocess(img)
+	inputData, release, err := preprocess(img)
 	if err != nil {
 		return nil, 0, fmt.Errorf("preprocess: %w", err)
 	}
+	defer release()
 
 	output, err := ic.client.Infer(inputData, 1, 3, inputH, inputW)
 	if err != nil {
@@ -280,14 +294,14 @@ func (ic *inferenceClient) Close() { ic.client.Close() }
 // Preprocessing
 // ---------------------------------------------------------------------------
 
-func preprocess(img image.Image) ([]float32, error) {
+func preprocess(img image.Image) ([]float32, func(), error) {
 	// Resize to input dimensions
-	resized := image.NewRGBA(image.Rect(0, 0, inputW, inputH))
-	draw.BiLinear.Scale(resized, resized.Bounds(), img, img.Bounds(), draw.Over, nil)
+	resized := rgbaPool.Get().(*image.RGBA)
+	draw.ApproxBiLinear.Scale(resized, resized.Bounds(), img, img.Bounds(), draw.Over, nil)
 
 	// Convert to float32 array (normalized 0-1, channels first: R, G, B).
 	// Use direct RGBA pixel buffer access to avoid per-pixel interface calls.
-	data := make([]float32, 3*inputH*inputW)
+	data := inputTensorPool.Get().([]float32)
 	stride := resized.Stride
 	pix := resized.Pix
 	for y := 0; y < inputH; y++ {
@@ -303,7 +317,11 @@ func preprocess(img image.Image) ([]float32, error) {
 			data[2*inputH*inputW+idx] = float32(b) / 255.0
 		}
 	}
-	return data, nil
+	cleanup := func() {
+		rgbaPool.Put(resized)
+		inputTensorPool.Put(data)
+	}
+	return data, cleanup, nil
 }
 
 // ---------------------------------------------------------------------------
