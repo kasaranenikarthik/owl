@@ -75,24 +75,35 @@ services:
   model-loader:
     image: python:3.11-slim
     container_name: owl-model-loader
+    environment:
+      TRITON_EXECUTION_TARGET: "${TRITON_EXECUTION_TARGET:-gpu}"
     command:
       - /bin/bash
       - -lc
       - |
         set -e
         ONNX_PATH=/repo/server/internal/onnx/yolov8s.onnx
-        MODEL_CONFIG_PATH=/repo/server/internal/models/yolov8s/config.pbtxt
+        CPU_CONFIG_PATH=/repo/server/internal/models/yolov8s/config.pbtxt
         GPU_CONFIG_PATH=/repo/server/internal/models/yolov8s/config.gpu.pbtxt
-        if [ -c /dev/nvidiactl ] || [ -f /proc/driver/nvidia/version ]; then
-          if [ -f "$$GPU_CONFIG_PATH" ]; then
-            MODEL_CONFIG_PATH="$$GPU_CONFIG_PATH"
-            echo "NVIDIA device detected, using GPU config: $$MODEL_CONFIG_PATH"
-          else
-            echo "NVIDIA device detected but $$GPU_CONFIG_PATH is missing; falling back to CPU config"
-          fi
-        else
-          echo "No NVIDIA device detected; using CPU config: $$MODEL_CONFIG_PATH"
-        fi
+        MODEL_CONFIG_PATH="$$CPU_CONFIG_PATH"
+        case "$${TRITON_EXECUTION_TARGET}" in
+          gpu)
+            if [ -f "$$GPU_CONFIG_PATH" ]; then
+              MODEL_CONFIG_PATH="$$GPU_CONFIG_PATH"
+              echo "Using explicit GPU config: $$MODEL_CONFIG_PATH"
+            else
+              echo "TRITON_EXECUTION_TARGET=gpu but $$GPU_CONFIG_PATH is missing"
+              exit 1
+            fi
+            ;;
+          cpu)
+            echo "Using explicit CPU config: $$MODEL_CONFIG_PATH"
+            ;;
+          *)
+            echo "Unsupported TRITON_EXECUTION_TARGET=$${TRITON_EXECUTION_TARGET}; use cpu or gpu"
+            exit 1
+            ;;
+        esac
         rm -rf /models/*
         mkdir -p /models/yolov8s/1
         cp "$$MODEL_CONFIG_PATH" /models/yolov8s/config.pbtxt
@@ -126,7 +137,9 @@ services:
       - --model-repository=/models
       - --strict-model-config=false
       - --allow-metrics=true
+      - --allow-gpu-metrics=true
       - --metrics-port=8002
+    gpus: all
     volumes:
       - model_repo:/models:ro
     ports:
@@ -218,6 +231,8 @@ services:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - owl
 
