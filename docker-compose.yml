@@ -86,7 +86,6 @@ services:
         CPU_CONFIG_PATH=/repo/server/internal/models/yolov8s/config.pbtxt
         GPU_CONFIG_PATH=/repo/server/internal/models/yolov8s/config.gpu.pbtxt
         MODEL_CONFIG_PATH="$$CPU_CONFIG_PATH"
-        EXPORT_FLAGS="--dynamic-batch --half"
         case "$${TRITON_EXECUTION_TARGET}" in
           gpu)
             if [ -f "$$GPU_CONFIG_PATH" ]; then

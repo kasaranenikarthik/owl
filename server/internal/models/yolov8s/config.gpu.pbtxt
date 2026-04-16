@@ -1,6 +1,6 @@
-name: "yolov8s"
+sname: "yolov8s"
 platform: "onnxruntime_onnx"
-max_batch_size: 32
+max_batch_size: 8
 
 input [{
   name: "images"
@@ -15,7 +15,7 @@ output [{
 }]
 
 dynamic_batching {
-  preferred_batch_size: [8, 16, 32]
+  preferred_batch_size: [4, 8]
   max_queue_delay_microseconds: 10000
 }
 
