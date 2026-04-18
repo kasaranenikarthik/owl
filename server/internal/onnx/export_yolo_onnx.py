@@ -116,11 +116,13 @@ def convert_onnx_to_fp16(model_path: Path) -> None:
         ) from exc
 
     model = onnx.load(str(model_path))
-    # Convert to full FP16, including model I/O, for an end-to-end FP16 Triton path.
+    # Keep model I/O as FP32 for client compatibility and avoid converting Cast ops,
+    # which can produce invalid type expectations in some YOLO ONNX graphs.
     fp16_model = convert_float_to_float16(
         model,
-        keep_io_types=False,
+        keep_io_types=True,
         disable_shape_infer=True,
+        op_block_list=["Cast"],
     )
     onnx.save(fp16_model, str(model_path))
 

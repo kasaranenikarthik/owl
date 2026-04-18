@@ -72,10 +72,9 @@ func main() {
 	defer cancel()
 
 	tritonAddr := envStr("TRITON_HTTP_ADDR", "localhost:8000")
-	tritonInputDatatype := envStr("TRITON_INPUT_DATATYPE", "FP32")
 	numWorkers := envInt("NUM_WORKERS", 8)
 
-	ic := mustCreateInferenceClient(tritonAddr, tritonInputDatatype, cfg.ConfidenceThreshold, logger)
+	ic := mustCreateInferenceClient(tritonAddr, cfg.ConfidenceThreshold, logger)
 	defer ic.Close()
 
 	producer := mustCreateProducer(cfg, logger)
@@ -107,8 +106,8 @@ func newLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
 
-func mustCreateInferenceClient(addr, inputDatatype string, confThresh float32, logger *slog.Logger) *inferenceClient {
-	tc, err := triton.NewClient("http://"+addr, modelName, inputDatatype, logger)
+func mustCreateInferenceClient(addr string, confThresh float32, logger *slog.Logger) *inferenceClient {
+	tc, err := triton.NewClient("http://"+addr, modelName, logger)
 	if err != nil {
 		logger.Error("triton connect failed", "error", err)
 		os.Exit(1)
