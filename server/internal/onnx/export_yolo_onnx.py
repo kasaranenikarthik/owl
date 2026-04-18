@@ -57,11 +57,6 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Export ONNX with dynamic batch dimension for Triton batching.",
     )
-    parser.add_argument(
-        "--half",
-        action="store_true",
-        help="Export ONNX model in FP16 (half precision) for reduced memory and faster inference.",
-    )
     return parser.parse_args()
 
 
@@ -106,25 +101,6 @@ def download_weights(url: str) -> Path:
     return dst
 
 
-def convert_onnx_to_fp16(model_path: Path) -> None:
-    try:
-        import onnx
-        from onnxconverter_common.float16 import convert_float_to_float16
-    except ImportError as exc:
-        raise RuntimeError(
-            "fp16 export requires onnxconverter-common; install it with: pip install onnxconverter-common"
-        ) from exc
-
-    model = onnx.load(str(model_path))
-    # Convert to full FP16, including model I/O, for an end-to-end FP16 Triton path.
-    fp16_model = convert_float_to_float16(
-        model,
-        keep_io_types=False,
-        disable_shape_infer=True,
-    )
-    onnx.save(fp16_model, str(model_path))
-
-
 def main() -> int:
     args = parse_args()
 
@@ -163,12 +139,8 @@ def main() -> int:
             opset=args.opset,
             simplify=args.simplify,
             dynamic=args.dynamic_batch,
-            half=False,
         )
     )
-
-    if args.half:
-        convert_onnx_to_fp16(result_path)
 
     # Ultralytics writes next to the weights file by default; move it to the requested output path.
     if result_path.resolve() != output:

@@ -112,11 +112,11 @@ services:
         else
           echo "ONNX not found at $$ONNX_PATH. Exporting a new model..."
           apt-get update && apt-get install -y --no-install-recommends wget ca-certificates libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libx11-6 libxcb1 && rm -rf /var/lib/apt/lists/*
-          python -m pip install --no-cache-dir "torch<2.6" "torchvision<0.21" ultralytics==8.1.0 onnx onnxruntime onnxconverter-common
+          python -m pip install --no-cache-dir "torch<2.6" "torchvision<0.21" ultralytics==8.1.0 onnx onnxruntime
           echo "Downloading YOLOv8s weights from ultralytics/assets v8.1.0..."
           wget -O /tmp/yolov8s.pt https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8s.pt
           echo "Exporting ONNX model to $$ONNX_PATH..."
-          python /repo/server/internal/onnx/export_yolo_onnx.py --weights /tmp/yolov8s.pt --output "$$ONNX_PATH" --imgsz 640 --opset 12 $$EXPORT_FLAGS
+          python /repo/server/internal/onnx/export_yolo_onnx.py --weights /tmp/yolov8s.pt --output "$$ONNX_PATH" --imgsz 640 --opset 12 --dynamic-batch
         fi
         cp "$$ONNX_PATH" /models/yolov8s/1/model.onnx
         ls -lh /models/yolov8s/1/
@@ -167,7 +167,7 @@ services:
       KAFKA_DETECTIONS_TOPIC: "detections"
       KAFKA_CONSUMER_GROUP: "gateway-detections"
       REDIS_ADDR: "redis:6379"
-      SIMILARITY_THRESHOLD: "-1"
+      SIMILARITY_THRESHOLD: "5"
       CACHE_TTL_SECONDS: "30"
       CONFIDENCE_THRESHOLD: "0.5"
     ports:
@@ -193,7 +193,7 @@ services:
       KAFKA_DETECTIONS_TOPIC: "detections"
       KAFKA_CONSUMER_GROUP: "yolo-inference"
       TRITON_HTTP_ADDR: "triton:8000"
-      NUM_WORKERS: "32"
+      NUM_WORKERS: "8"
       CONFIDENCE_THRESHOLD: "0.5"
     ports:
       - "19091:9090"
