@@ -168,7 +168,7 @@ services:
       KAFKA_DETECTIONS_TOPIC: "detections"
       KAFKA_CONSUMER_GROUP: "gateway-detections"
       REDIS_ADDR: "redis:6379"
-      SIMILARITY_THRESHOLD: "5"
+      SIMILARITY_THRESHOLD: "-1"
       CACHE_TTL_SECONDS: "30"
       CONFIDENCE_THRESHOLD: "0.5"
     ports:
@@ -194,7 +194,7 @@ services:
       KAFKA_DETECTIONS_TOPIC: "detections"
       KAFKA_CONSUMER_GROUP: "yolo-inference"
       TRITON_HTTP_ADDR: "triton:8000"
-      NUM_WORKERS: "8"
+      NUM_WORKERS: "32"
       CONFIDENCE_THRESHOLD: "0.5"
     ports:
       - "19091:9090"
