@@ -23,10 +23,19 @@ type Client struct {
 }
 
 // NewClient creates a Triton HTTP client and verifies the server and model are ready.
-func NewClient(baseURL, modelName string, logger *slog.Logger) (*Client, error) {
+func NewClient(baseURL, modelName, inputDatatype string, logger *slog.Logger) (*Client, error) {
+	dtype := strings.ToUpper(strings.TrimSpace(inputDatatype))
+	if dtype == "" {
+		dtype = "FP32"
+	}
+	if dtype != "FP32" && dtype != "FP16" {
+		return nil, fmt.Errorf("unsupported Triton input datatype: %s", inputDatatype)
+	}
+
 	c := &Client{
-		baseURL:   baseURL,
-		modelName: modelName,
+		baseURL:       baseURL,
+		modelName:     modelName,
+		inputDatatype: dtype,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -42,48 +51,8 @@ func NewClient(baseURL, modelName string, logger *slog.Logger) (*Client, error) 
 		return nil, err
 	}
 
-	dtype, err := c.fetchModelInputDatatype()
-	if err != nil {
-		return nil, err
-	}
-	c.inputDatatype = dtype
-
 	logger.Info("triton connected", "url", baseURL, "model", modelName, "input_datatype", dtype)
 	return c, nil
-}
-
-func (c *Client) fetchModelInputDatatype() (string, error) {
-	url := fmt.Sprintf("%s/v2/models/%s/config", c.baseURL, c.modelName)
-	resp, err := c.httpClient.Get(url)
-	if err != nil {
-		return "", fmt.Errorf("get model config: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		errBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("model config returned %d: %s", resp.StatusCode, string(errBody))
-	}
-
-	var cfg modelConfigResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
-		return "", fmt.Errorf("decode model config: %w", err)
-	}
-	if len(cfg.Input) == 0 {
-		return "", fmt.Errorf("model config has no inputs")
-	}
-
-	dtype := strings.TrimSpace(cfg.Input[0].DataType)
-	if dtype == "" {
-		return "", fmt.Errorf("model input datatype is empty")
-	}
-
-	// Triton config endpoint returns TYPE_FP16/TYPE_FP32; infer endpoint expects FP16/FP32.
-	dtype = strings.TrimPrefix(strings.ToUpper(dtype), "TYPE_")
-	if dtype != "FP16" && dtype != "FP32" {
-		return "", fmt.Errorf("unsupported model input datatype: %s", cfg.Input[0].DataType)
-	}
-	return dtype, nil
 }
 
 // Infer sends a preprocessed float32 tensor to Triton and returns the raw output.
@@ -278,13 +247,6 @@ type inferResponseOutput struct {
 	Datatype   string         `json:"datatype"`
 	Shape      []int          `json:"shape"`
 	Parameters map[string]any `json:"parameters,omitempty"`
-}
-
-type modelConfigResponse struct {
-	Input []struct {
-		Name     string `json:"name"`
-		DataType string `json:"data_type"`
-	} `json:"input"`
 }
 
 // ---------------------------------------------------------------------------
