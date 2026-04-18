@@ -9,15 +9,17 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // Client talks to Triton Inference Server over HTTP.
 type Client struct {
-	baseURL    string
-	modelName  string
-	httpClient *http.Client
-	logger     *slog.Logger
+	baseURL       string
+	modelName     string
+	inputDatatype string
+	httpClient    *http.Client
+	logger        *slog.Logger
 }
 
 // NewClient creates a Triton HTTP client and verifies the server and model are ready.
@@ -40,23 +42,70 @@ func NewClient(baseURL, modelName string, logger *slog.Logger) (*Client, error) 
 		return nil, err
 	}
 
-	logger.Info("triton connected", "url", baseURL, "model", modelName)
+	dtype, err := c.fetchModelInputDatatype()
+	if err != nil {
+		return nil, err
+	}
+	c.inputDatatype = dtype
+
+	logger.Info("triton connected", "url", baseURL, "model", modelName, "input_datatype", dtype)
 	return c, nil
+}
+
+func (c *Client) fetchModelInputDatatype() (string, error) {
+	url := fmt.Sprintf("%s/v2/models/%s/config", c.baseURL, c.modelName)
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("get model config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("model config returned %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	var cfg modelConfigResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		return "", fmt.Errorf("decode model config: %w", err)
+	}
+	if len(cfg.Input) == 0 {
+		return "", fmt.Errorf("model config has no inputs")
+	}
+
+	dtype := strings.TrimSpace(cfg.Input[0].DataType)
+	if dtype == "" {
+		return "", fmt.Errorf("model input datatype is empty")
+	}
+
+	// Triton config endpoint returns TYPE_FP16/TYPE_FP32; infer endpoint expects FP16/FP32.
+	dtype = strings.TrimPrefix(strings.ToUpper(dtype), "TYPE_")
+	if dtype != "FP16" && dtype != "FP32" {
+		return "", fmt.Errorf("unsupported model input datatype: %s", cfg.Input[0].DataType)
+	}
+	return dtype, nil
 }
 
 // Infer sends a preprocessed float32 tensor to Triton and returns the raw output.
 // Input shape: [1, 3, H, W] float32
 // Output: raw float32 slice from Triton
 func (c *Client) Infer(inputData []float32, batchSize, channels, height, width int) ([]float32, error) {
+	inputSizeBytes := len(inputData) * 4
+	tensorBytes := float32SliceToBytes(inputData)
+	if c.inputDatatype == "FP16" {
+		inputSizeBytes = len(inputData) * 2
+		tensorBytes = float32SliceToFloat16Bytes(inputData)
+	}
+
 	// Build the inference request with binary tensor extension
 	reqBody := inferRequest{
 		Inputs: []inferInput{
 			{
 				Name:     "images",
-				Datatype: "FP32",
+				Datatype: c.inputDatatype,
 				Shape:    []int{batchSize, channels, height, width},
 				Parameters: map[string]any{
-					"binary_data_size": len(inputData) * 4,
+					"binary_data_size": inputSizeBytes,
 				},
 			},
 		},
@@ -75,8 +124,7 @@ func (c *Client) Infer(inputData []float32, batchSize, channels, height, width i
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	// Binary extension: JSON header + raw float32 bytes appended
-	tensorBytes := float32SliceToBytes(inputData)
+	// Binary extension: JSON header + raw tensor bytes appended
 
 	body := make([]byte, 0, len(jsonBytes)+len(tensorBytes))
 	body = append(body, jsonBytes...)
@@ -191,6 +239,10 @@ func (c *Client) parseInferResponse(resp *http.Response) ([]float32, error) {
 		return nil, fmt.Errorf("no binary data in response")
 	}
 
+	if len(inferResp.Outputs) > 0 && strings.EqualFold(inferResp.Outputs[0].Datatype, "FP16") {
+		return bytesToFloat16AsFloat32Slice(binaryData), nil
+	}
+
 	return bytesToFloat32Slice(binaryData), nil
 }
 
@@ -228,6 +280,13 @@ type inferResponseOutput struct {
 	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
+type modelConfigResponse struct {
+	Input []struct {
+		Name     string `json:"name"`
+		DataType string `json:"data_type"`
+	} `json:"input"`
+}
+
 // ---------------------------------------------------------------------------
 // Binary helpers
 // ---------------------------------------------------------------------------
@@ -240,12 +299,96 @@ func float32SliceToBytes(data []float32) []byte {
 	return buf
 }
 
+func float32SliceToFloat16Bytes(data []float32) []byte {
+	buf := make([]byte, len(data)*2)
+	for i, v := range data {
+		binary.LittleEndian.PutUint16(buf[i*2:], float32ToFloat16Bits(v))
+	}
+	return buf
+}
+
 func bytesToFloat32Slice(buf []byte) []float32 {
 	data := make([]float32, len(buf)/4)
 	for i := range data {
 		data[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[i*4:]))
 	}
 	return data
+}
+
+func bytesToFloat16AsFloat32Slice(buf []byte) []float32 {
+	data := make([]float32, len(buf)/2)
+	for i := range data {
+		data[i] = float16BitsToFloat32(binary.LittleEndian.Uint16(buf[i*2:]))
+	}
+	return data
+}
+
+func float32ToFloat16Bits(f float32) uint16 {
+	b := math.Float32bits(f)
+	sign := uint16((b >> 16) & 0x8000)
+	exp := int((b>>23)&0xFF) - 127 + 15
+	mant := b & 0x7FFFFF
+
+	if exp <= 0 {
+		if exp < -10 {
+			return sign
+		}
+		mant = (mant | 0x800000) >> uint32(1-exp)
+		if (mant & 0x1000) != 0 {
+			mant += 0x2000
+		}
+		return sign | uint16(mant>>13)
+	}
+
+	if exp >= 31 {
+		if mant == 0 {
+			return sign | 0x7C00
+		}
+		return sign | 0x7C00 | uint16(mant>>13)
+	}
+
+	if (mant & 0x1000) != 0 {
+		mant += 0x2000
+		if (mant & 0x800000) != 0 {
+			mant = 0
+			exp++
+			if exp >= 31 {
+				return sign | 0x7C00
+			}
+		}
+	}
+
+	return sign | uint16(exp<<10) | uint16(mant>>13)
+}
+
+func float16BitsToFloat32(h uint16) float32 {
+	sign := uint32(h&0x8000) << 16
+	exp := (h >> 10) & 0x1F
+	mant := uint32(h & 0x03FF)
+
+	if exp == 0 {
+		if mant == 0 {
+			return math.Float32frombits(sign)
+		}
+		// Normalize subnormal half to float32.
+		exp32 := uint32(127 - 15 + 1)
+		for (mant & 0x0400) == 0 {
+			mant <<= 1
+			exp32--
+		}
+		mant &= 0x03FF
+		bits := sign | (exp32 << 23) | (mant << 13)
+		return math.Float32frombits(bits)
+	}
+
+	if exp == 0x1F {
+		bits := sign | 0x7F800000 | (mant << 13)
+		return math.Float32frombits(bits)
+	}
+
+	exp32 := uint32(exp) - 15 + 127
+	bits := sign | (exp32 << 23) | (mant << 13)
+	return math.Float32frombits(bits)
 }
 
 func findJSONEnd(data []byte) int {
