@@ -2,12 +2,6 @@ name: "yolov8s"
 platform: "onnxruntime_onnx"
 max_batch_size: 8
 
-execution_accelerators {
-  gpu_execution_provider {
-    device_id: 0
-  }
-}
-
 input [{
   name: "images"
   data_type: TYPE_FP32
