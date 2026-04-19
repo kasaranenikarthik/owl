@@ -194,7 +194,7 @@ services:
       KAFKA_DETECTIONS_TOPIC: "detections"
       KAFKA_CONSUMER_GROUP: "yolo-inference"
       TRITON_HTTP_ADDR: "triton:8000"
-      NUM_WORKERS: "16"
+      NUM_WORKERS: "4"
       CONFIDENCE_THRESHOLD: "0.5"
     ports:
       - "19091:9090"
