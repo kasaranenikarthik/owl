@@ -760,7 +760,50 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(yolo_frames_dropped_total{job=\"inference\"}[1m]))",
+          "expr": "sum(rate(yolo_frames_dropped_reason_total{job=\"inference\"}[1m])) by (reason)",
+          "legendFormat": "{{reason}} dropped/s",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Inference Frame Drops by Reason",
+      "type": "timeseries",
+      "description": "Inference bridge frame drop rate split by reason (for example stale age cutoff or queue saturation).",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 39
+      },
+      "id": 119,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_dropped_reason_total{job=\"inference\",reason=\"stale\"}[1m]))",
           "legendFormat": "stale dropped before inference/s",
           "range": true,
           "refId": "A"
@@ -768,7 +811,93 @@
       ],
       "title": "Stale Frames Dropped in Inference",
       "type": "timeseries",
-      "description": "Frames dropped by inference bridge due to staleness checks before compute.",
+      "description": "Frames dropped by inference bridge due to stale age cutoff before compute.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 39
+      },
+      "id": 120,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * sum(rate(process_cpu_seconds_total{job=\"inference\"}[1m]))",
+          "legendFormat": "cpu busy % (1 core=100)",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Go CPU Utilization",
+      "type": "timeseries",
+      "description": "Inference process CPU utilization derived from process_cpu_seconds_total (100% equals one fully used CPU core).",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 39
+      },
+      "id": 121,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(go_goroutines{job=\"inference\"})",
+          "legendFormat": "goroutines",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Go Goroutines",
+      "type": "timeseries",
+      "description": "Current number of goroutines in the inference process.",
       "transparent": true
     },
     {
@@ -784,8 +913,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
+        "w": 6,
+        "x": 18,
         "y": 39
       },
       "id": 19,
@@ -940,14 +1069,28 @@
         {
           "editorMode": "code",
           "expr": "sum(rate(yolo_frames_dropped_total{job=\"inference\"}[1m]))",
-          "legendFormat": "dropped/s",
+          "legendFormat": "dropped total/s",
           "range": true,
           "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_dropped_reason_total{job=\"inference\",reason=\"stale\"}[1m]))",
+          "legendFormat": "dropped stale/s",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_dropped_reason_total{job=\"inference\",reason=\"queue_full\"}[1m]))",
+          "legendFormat": "dropped queue_full/s",
+          "range": true,
+          "refId": "D"
         }
       ],
       "title": "Inference Throughput",
       "type": "timeseries",
-      "description": "Processed versus dropped frame throughput in the inference bridge.",
+      "description": "Processed throughput with total and reason-specific drop throughput in the inference bridge.",
       "transparent": true
     },
     {

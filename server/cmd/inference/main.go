@@ -148,12 +148,17 @@ type frameJob struct {
 }
 
 type workerPool struct {
-	jobs   chan frameJob
-	wg     sync.WaitGroup
-	ic     *inferenceClient
-	prod   *kafka.Producer
-	topic  string
-	logger *slog.Logger
+	jobs        chan string
+	wg          sync.WaitGroup
+	ic          *inferenceClient
+	prod        *kafka.Producer
+	topic       string
+	logger      *slog.Logger
+	maxFrameAge time.Duration
+
+	pendingMu sync.Mutex
+	pending   map[string]frameJob
+	queued    map[string]bool
 }
 
 func newWorkerPool(
@@ -164,12 +169,17 @@ func newWorkerPool(
 	topic string,
 	logger *slog.Logger,
 ) *workerPool {
+	maxFrameAge := time.Duration(envInt("STALE_FRAME_THRESHOLD_MS", 5000)) * time.Millisecond
+	queueSize := n * 4
 	p := &workerPool{
-		jobs:   make(chan frameJob, n*2),
-		ic:     ic,
-		prod:   prod,
-		topic:  topic,
-		logger: logger,
+		jobs:        make(chan string, queueSize),
+		ic:          ic,
+		prod:        prod,
+		topic:       topic,
+		logger:      logger,
+		maxFrameAge: maxFrameAge,
+		pending:     make(map[string]frameJob),
+		queued:      make(map[string]bool),
 	}
 	metrics.WorkerPoolCapacity.Set(float64(n))
 
@@ -177,26 +187,59 @@ func newWorkerPool(
 	for i := 0; i < n; i++ {
 		go p.worker(ctx, i)
 	}
-	logger.Info("worker pool started", "workers", n, "buffer", n*2)
+	logger.Info("worker pool started",
+		"workers", n,
+		"queue_slots", queueSize,
+		"stale_threshold_ms", maxFrameAge.Milliseconds(),
+	)
 	return p
 }
 
 func (p *workerPool) dispatch(ctx context.Context, key, value []byte) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	var frame models.FrameMessage
 	if err := json.Unmarshal(value, &frame); err != nil {
 		return fmt.Errorf("unmarshal: %w", err)
 	}
 	metrics.InferenceFramesConsumed.Inc()
-	if time.Since(frame.Timestamp) > 2*time.Second {
+	if time.Since(frame.Timestamp) > p.maxFrameAge {
 		metrics.FramesDropped.Inc()
+		metrics.FramesDroppedByReason.WithLabelValues("stale").Inc()
+		return nil
+	}
+
+	p.pendingMu.Lock()
+	hadPending := false
+	if _, ok := p.pending[frame.ClientID]; ok {
+		hadPending = true
+	}
+	p.pending[frame.ClientID] = frameJob{frame: frame, enqueuedAt: time.Now()}
+	if p.queued[frame.ClientID] {
+		p.pendingMu.Unlock()
+		if hadPending {
+			metrics.FramesDropped.Inc()
+			metrics.FramesDroppedByReason.WithLabelValues("superseded").Inc()
+		}
 		return nil
 	}
 	select {
-	case p.jobs <- frameJob{frame: frame, enqueuedAt: time.Now()}:
-		metrics.WorkerPoolQueueDepth.Set(float64(len(p.jobs)))
+	case p.jobs <- frame.ClientID:
+		p.queued[frame.ClientID] = true
+		queueDepth := len(p.jobs)
+		p.pendingMu.Unlock()
+		metrics.WorkerPoolQueueDepth.Set(float64(queueDepth))
 		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	default:
+		delete(p.pending, frame.ClientID)
+		p.pendingMu.Unlock()
+		metrics.FramesDropped.Inc()
+		metrics.FramesDroppedByReason.WithLabelValues("queue_full").Inc()
+		return nil
 	}
 }
 
@@ -206,11 +249,22 @@ func (p *workerPool) worker(ctx context.Context, id int) {
 		select {
 		case <-ctx.Done():
 			return
-		case job, ok := <-p.jobs:
+		case clientID, ok := <-p.jobs:
 			if !ok {
 				return
 			}
-			metrics.WorkerPoolQueueDepth.Set(float64(len(p.jobs)))
+
+			p.pendingMu.Lock()
+			job, exists := p.pending[clientID]
+			delete(p.pending, clientID)
+			p.queued[clientID] = false
+			queueDepth := len(p.jobs)
+			p.pendingMu.Unlock()
+
+			metrics.WorkerPoolQueueDepth.Set(float64(queueDepth))
+			if !exists {
+				continue
+			}
 			metrics.WorkerQueueWaitDuration.Observe(time.Since(job.enqueuedAt).Seconds())
 			p.processJob(ctx, job)
 		}
