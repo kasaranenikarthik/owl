@@ -76,8 +76,12 @@ var (
 	})
 	FramesDropped = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "yolo_frames_dropped_total",
-		Help: "Stale frames dropped before inference",
+		Help: "Frames dropped before inference",
 	})
+	FramesDroppedByReason = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "yolo_frames_dropped_reason_total",
+		Help: "Frames dropped before inference, split by reason",
+	}, []string{"reason"})
 	WorkerQueueWaitDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "yolo_worker_queue_wait_seconds",
 		Help:    "Time a frame spends waiting in the local worker queue before inference starts",
