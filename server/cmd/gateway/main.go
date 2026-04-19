@@ -74,9 +74,15 @@ func (r *registry) Get(id string) (*client, bool) {
 }
 
 func (c *client) SendJSON(v any) error {
+	start := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.conn.WriteJSON(v)
+	err := c.conn.WriteJSON(v)
+	metrics.WebsocketWriteDuration.Observe(time.Since(start).Seconds())
+	if err != nil {
+		metrics.WebsocketWriteFailures.Inc()
+	}
+	return err
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +164,8 @@ func startDetectionsConsumer(ctx context.Context, cfg config.Config, logger *slo
 }
 
 func handleDetectionResult(ctx context.Context, value []byte, simCache *similarity.Cache, reg *registry) error {
+	metrics.DetectionsConsumed.Inc()
+
 	var internal models.InternalResult
 	if err := json.Unmarshal(value, &internal); err != nil {
 		return fmt.Errorf("unmarshal detection: %w", err)
@@ -263,9 +271,11 @@ func processFrame(ctx context.Context, cfg config.Config, logger *slog.Logger, s
 	frameID := c.frameSeq.Add(1)
 	now := time.Now()
 
+	cacheStart := time.Now()
 	frameHash, hashErr := similarity.AverageHash(data)
 	if hashErr == nil {
 		cached, hit, err := simCache.CheckAndUpdate(ctx, clientID, frameHash, data)
+		metrics.CacheLookupDuration.Observe(time.Since(cacheStart).Seconds())
 		if err != nil {
 			logger.Warn("similarity cache check failed", "client_id", clientID, "error", err)
 		}
@@ -285,6 +295,7 @@ func processFrame(ctx context.Context, cfg config.Config, logger *slog.Logger, s
 			return nil
 		}
 	}
+	metrics.CacheLookupDuration.Observe(time.Since(cacheStart).Seconds())
 
 	metrics.CacheMisses.Inc()
 	c.pending.Store(frameID, now)
@@ -296,9 +307,14 @@ func processFrame(ctx context.Context, cfg config.Config, logger *slog.Logger, s
 		Data:      data,
 	}
 
+	publishStart := time.Now()
 	if err := producer.Publish(cfg.FramesTopic, clientID, frame); err != nil {
+		metrics.FramePublishDuration.Observe(time.Since(publishStart).Seconds())
+		metrics.FramePublishFailures.Inc()
 		return fmt.Errorf("kafka publish: %w", err)
 	}
+	metrics.FramePublishDuration.Observe(time.Since(publishStart).Seconds())
+	metrics.FramesPublished.Inc()
 
 	return nil
 }

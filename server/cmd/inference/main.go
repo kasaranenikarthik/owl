@@ -143,7 +143,8 @@ func mustCreateConsumer(cfg config.Config, pool *workerPool, logger *slog.Logger
 // ---------------------------------------------------------------------------
 
 type frameJob struct {
-	frame models.FrameMessage
+	frame      models.FrameMessage
+	enqueuedAt time.Time
 }
 
 type workerPool struct {
@@ -185,12 +186,13 @@ func (p *workerPool) dispatch(ctx context.Context, key, value []byte) error {
 	if err := json.Unmarshal(value, &frame); err != nil {
 		return fmt.Errorf("unmarshal: %w", err)
 	}
+	metrics.InferenceFramesConsumed.Inc()
 	if time.Since(frame.Timestamp) > 2*time.Second {
 		metrics.FramesDropped.Inc()
 		return nil
 	}
 	select {
-	case p.jobs <- frameJob{frame: frame}:
+	case p.jobs <- frameJob{frame: frame, enqueuedAt: time.Now()}:
 		metrics.WorkerPoolQueueDepth.Set(float64(len(p.jobs)))
 		return nil
 	case <-ctx.Done():
@@ -209,6 +211,7 @@ func (p *workerPool) worker(ctx context.Context, id int) {
 				return
 			}
 			metrics.WorkerPoolQueueDepth.Set(float64(len(p.jobs)))
+			metrics.WorkerQueueWaitDuration.Observe(time.Since(job.enqueuedAt).Seconds())
 			p.processJob(ctx, job)
 		}
 	}
@@ -219,11 +222,6 @@ func (p *workerPool) processJob(ctx context.Context, job frameJob) {
 	defer metrics.WorkerPoolActive.Dec()
 
 	frame := job.frame
-	if time.Since(frame.Timestamp) > 2*time.Second {
-		metrics.FramesDropped.Inc()
-		return
-	}
-
 	dets, ms, err := p.ic.Infer(ctx, frame.Data)
 	if err != nil {
 		p.logger.Warn("inference failed", "client_id", frame.ClientID, "error", err)
@@ -241,9 +239,15 @@ func (p *workerPool) processJob(ctx context.Context, job frameJob) {
 		InferenceMs: ms,
 		Timestamp:   time.Now(),
 	}
+	publishStart := time.Now()
 	if err := p.prod.Publish(p.topic, frame.ClientID, result); err != nil {
+		metrics.ResultPublishDuration.Observe(time.Since(publishStart).Seconds())
+		metrics.ResultPublishFailures.Inc()
 		p.logger.Warn("publish failed", "client_id", frame.ClientID, "error", err)
+		return
 	}
+	metrics.ResultPublishDuration.Observe(time.Since(publishStart).Seconds())
+	metrics.InferenceResultsPublished.Inc()
 }
 
 func (p *workerPool) Shutdown() {

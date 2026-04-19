@@ -34,9 +34,32 @@ var (
 		Name: "gateway_cache_misses_total",
 		Help: "Frames sent to GPU for inference",
 	})
+	CacheLookupDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "gateway_cache_lookup_seconds",
+		Help:    "Time spent checking and updating the similarity cache",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
+	})
+	FramePublishDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "gateway_frame_publish_seconds",
+		Help:    "Time spent publishing a frame to Kafka",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
+	})
+	FramePublishFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "gateway_frame_publish_failures_total",
+		Help: "Total Kafka publish failures for frames",
+	})
 	FramesDroppedStale = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "gateway_frames_dropped_stale_total",
 		Help: "Results dropped because a newer result was already sent",
+	})
+	WebsocketWriteDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "gateway_websocket_write_seconds",
+		Help:    "Time spent writing a JSON message to the websocket client",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
+	})
+	WebsocketWriteFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "gateway_websocket_write_failures_total",
+		Help: "Total websocket write failures",
 	})
 	E2ELatency = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "gateway_e2e_latency_seconds",
@@ -54,6 +77,11 @@ var (
 	FramesDropped = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "yolo_frames_dropped_total",
 		Help: "Stale frames dropped before inference",
+	})
+	WorkerQueueWaitDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "yolo_worker_queue_wait_seconds",
+		Help:    "Time a frame spends waiting in the local worker queue before inference starts",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
 	})
 	InferenceDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "yolo_inference_duration_seconds",
@@ -76,6 +104,42 @@ var (
 	WorkerPoolCapacity = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "yolo_worker_pool_capacity",
 		Help: "Total worker pool size",
+	})
+	ResultPublishDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "yolo_result_publish_seconds",
+		Help:    "Time spent publishing detections back to Kafka",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
+	})
+	ResultPublishFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "yolo_result_publish_failures_total",
+		Help: "Total Kafka publish failures for detection results",
+	})
+)
+
+// Kafka/Message queue metrics
+var (
+	// Gateway → Frames topic (producer)
+	FramesPublished = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "gateway_frames_published_total",
+		Help: "Total frames published to Kafka frames topic",
+	})
+
+	// Gateway ← Detections topic (consumer)
+	DetectionsConsumed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "gateway_detections_consumed_total",
+		Help: "Total detection results consumed from Kafka detections topic",
+	})
+
+	// Inference ← Frames topic (consumer)
+	InferenceFramesConsumed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "yolo_frames_consumed_total",
+		Help: "Total frames consumed from Kafka frames topic (includes stale drops)",
+	})
+
+	// Inference → Detections topic (producer)
+	InferenceResultsPublished = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "yolo_results_published_total",
+		Help: "Total detection results published to Kafka detections topic",
 	})
 )
 
