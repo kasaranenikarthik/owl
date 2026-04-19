@@ -89,7 +89,9 @@
         }
       ],
       "title": "Avg Triton Request",
-      "type": "stat"
+      "type": "stat",
+      "description": "Average Triton request latency computed from native Triton counters.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -159,7 +161,9 @@
         }
       ],
       "title": "Avg Triton Queue",
-      "type": "stat"
+      "type": "stat",
+      "description": "Average time requests wait in Triton queue before execution.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -229,7 +233,9 @@
         }
       ],
       "title": "Avg Triton Compute",
-      "type": "stat"
+      "type": "stat",
+      "description": "Average Triton GPU compute latency per inference execution.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -299,7 +305,9 @@
         }
       ],
       "title": "Avg Batch Size",
-      "type": "stat"
+      "type": "stat",
+      "description": "Estimated average batch size processed by Triton over time.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -371,7 +379,9 @@
         }
       ],
       "title": "GPU Utilization",
-      "type": "stat"
+      "type": "stat",
+      "description": "Current GPU utilization percentage reported by Triton native metrics.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -441,7 +451,9 @@
         }
       ],
       "title": "Pending Requests",
-      "type": "stat"
+      "type": "stat",
+      "description": "Current number of pending inference requests inside Triton.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -546,7 +558,9 @@
         }
       ],
       "title": "Triton Latency Breakdown",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Request, queue, and compute latency components from Triton native metrics.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -644,7 +658,9 @@
         }
       ],
       "title": "Pipeline p95 Latency",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "p95 comparison between gateway end-to-end latency and bridge inference latency.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -742,7 +758,9 @@
         }
       ],
       "title": "Triton Request Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Triton request success and failure throughput per second.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -833,7 +851,9 @@
         }
       ],
       "title": "GPU Utilization %",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "GPU utilization percentage trend over time.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -924,7 +944,9 @@
         }
       ],
       "title": "GPU Memory Used",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "GPU memory consumption in GiB.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1061,7 +1083,9 @@
         }
       ],
       "title": "Inference Worker Pool",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Inference bridge queue depth and active worker count.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -1074,7 +1098,9 @@
       "id": 18,
       "panels": [],
       "title": "Gateway Path",
-      "type": "row"
+      "type": "row",
+      "description": "Gateway-specific metrics from ingress, cache, and websocket stages.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1165,7 +1191,9 @@
         }
       ],
       "title": "Cache Lookup Latency",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "p95 latency for cache lookup/update operations in gateway.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1256,7 +1284,9 @@
         }
       ],
       "title": "Frame Publish Latency",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "p95 latency to publish frames from gateway to Kafka.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -1269,7 +1299,9 @@
       "id": 30,
       "panels": [],
       "title": "Cache",
-      "type": "row"
+      "type": "row",
+      "description": "Cache effectiveness and hit/miss behavior section.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1341,7 +1373,9 @@
         }
       ],
       "title": "Cache Hit Rate",
-      "type": "stat"
+      "type": "stat",
+      "description": "Percentage of frames served from similarity cache.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1466,7 +1500,9 @@
         }
       ],
       "title": "Cache Effectiveness",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Cache hits versus misses throughput trend.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -1479,7 +1515,9 @@
       "id": 31,
       "panels": [],
       "title": "Websocket",
-      "type": "row"
+      "type": "row",
+      "description": "Gateway websocket write and result publish behavior section.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1588,7 +1626,9 @@
         }
       ],
       "title": "Result Publish",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Inference result publish latency/failures from bridge to Kafka.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1658,7 +1698,9 @@
         }
       ],
       "title": "Websocket Write Latency",
-      "type": "stat"
+      "type": "stat",
+      "description": "p95 websocket write latency from gateway to connected clients.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -1671,7 +1713,9 @@
       "id": 19,
       "panels": [],
       "title": "Inference Path",
-      "type": "row"
+      "type": "row",
+      "description": "Inference bridge processing and throughput section.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1773,7 +1817,9 @@
         }
       ],
       "title": "Inference Frame Throughput",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Processed versus dropped frame throughput in inference bridge.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -1786,7 +1832,9 @@
       "id": 21,
       "panels": [],
       "title": "Kafka Metrics",
-      "type": "row"
+      "type": "row",
+      "description": "Gateway and inference traffic across frames and detections topics.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1880,7 +1928,9 @@
         }
       ],
       "title": "Gateway Kafka Traffic",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Gateway-side Kafka produce/consume throughput for frames and detections.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1974,7 +2024,9 @@
         }
       ],
       "title": "Inference Kafka Traffic",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Inference-side Kafka consume/publish throughput for frames and detections.",
+      "transparent": true
     }
   ],
   "refresh": "5s",
@@ -1996,5 +2048,6 @@
   "title": "OWL Local Triton",
   "uid": "owl-local-triton",
   "version": 7,
-  "weekStart": ""
+  "weekStart": "",
+  "description": "Unified local observability dashboard for gateway, inference bridge, Triton, cache, websocket, and Kafka flow metrics."
 }

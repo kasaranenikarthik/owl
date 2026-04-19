@@ -32,7 +32,9 @@
       "id": 1,
       "panels": [],
       "title": "Triton Metrics",
-      "type": "row"
+      "type": "row",
+      "description": "Native Triton server performance section for request, queue, compute, and request flow.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -98,7 +100,9 @@
         }
       ],
       "title": "Avg Triton Request",
-      "type": "stat"
+      "type": "stat",
+      "description": "Average Triton request latency computed from native Triton counters.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -164,7 +168,9 @@
         }
       ],
       "title": "Avg Triton Queue",
-      "type": "stat"
+      "type": "stat",
+      "description": "Average time requests wait in Triton queue before execution.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -230,7 +236,9 @@
         }
       ],
       "title": "Avg Triton Compute",
-      "type": "stat"
+      "type": "stat",
+      "description": "Average Triton GPU compute latency per inference execution.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -288,7 +296,9 @@
         }
       ],
       "title": "Avg Batch Size",
-      "type": "stat"
+      "type": "stat",
+      "description": "Estimated average batch size processed by Triton over time.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -354,7 +364,9 @@
         }
       ],
       "title": "Pending Requests",
-      "type": "stat"
+      "type": "stat",
+      "description": "Current number of pending inference requests inside Triton.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -420,7 +432,9 @@
         }
       ],
       "title": "Triton GPU Utilization",
-      "type": "stat"
+      "type": "stat",
+      "description": "Current Triton-reported GPU utilization percentage.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -525,7 +539,9 @@
         }
       ],
       "title": "Triton Latency Breakdown",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Request, queue, and compute latency components from Triton native metrics.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -623,7 +639,9 @@
         }
       ],
       "title": "Triton Request Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Triton request success and failure throughput per second.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -636,7 +654,9 @@
       "id": 10,
       "panels": [],
       "title": "DCGM Metrics",
-      "type": "row"
+      "type": "row",
+      "description": "Hardware telemetry section from DCGM exporter for GPU health and IO.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -731,7 +751,9 @@
         }
       ],
       "title": "GPU Utilization (DCGM)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Device utilization percentage from DCGM by GPU and node.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -824,7 +846,9 @@
         }
       ],
       "title": "GPU Memory Used (DCGM)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "DCGM frame-buffer memory used/free trend by GPU.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -919,7 +943,9 @@
         }
       ],
       "title": "GPU Temperature (DCGM)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "DCGM GPU temperature trend by device.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1014,7 +1040,9 @@
         }
       ],
       "title": "GPU Power Usage (DCGM)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "DCGM GPU power draw trend in watts.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1108,7 +1136,9 @@
         }
       ],
       "title": "GPU SM Clock (DCGM)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "DCGM streaming multiprocessor clock frequency trend.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1201,7 +1231,9 @@
         }
       ],
       "title": "GPU PCIe Throughput (DCGM)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "DCGM PCIe transmit/receive throughput trend.",
+      "transparent": true
     }
   ],
   "refresh": "5s",
@@ -1224,5 +1256,6 @@
   "title": "OWL DCGM and Triton",
   "uid": "owl-dcgm-triton",
   "version": 1,
-  "weekStart": ""
+  "weekStart": "",
+  "description": "GPU and Triton server dashboard focused on native Triton inference metrics and DCGM hardware telemetry only."
 }

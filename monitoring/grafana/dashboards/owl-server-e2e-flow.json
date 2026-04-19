@@ -32,7 +32,9 @@
       "id": 1,
       "panels": [],
       "title": "1) WebSocket Ingress (Gateway)",
-      "type": "row"
+      "type": "row",
+      "description": "Ingress stage where gateway accepts websocket clients and incoming frames.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -87,7 +89,9 @@
         }
       ],
       "title": "Active WS Clients (Gateway)",
-      "type": "stat"
+      "type": "stat",
+      "description": "Current number of websocket clients connected to gateway.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -128,7 +132,9 @@
         }
       ],
       "title": "Incoming Frame Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Frame ingress throughput at gateway websocket boundary.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -183,7 +189,9 @@
         }
       ],
       "title": "WS Write Latency",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Gateway websocket write latency percentiles for outbound responses.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -196,7 +204,9 @@
       "id": 5,
       "panels": [],
       "title": "2) Gateway Intake, Cache, and Publish",
-      "type": "row"
+      "type": "row",
+      "description": "Gateway stage for cache decisions, topic publish, and write failures.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -244,7 +254,9 @@
         }
       ],
       "title": "Cache Hit vs Miss Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Gateway cache hit/miss rates to quantify avoided inference work.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -289,7 +301,9 @@
         }
       ],
       "title": "Cache Hit Ratio",
-      "type": "stat"
+      "type": "stat",
+      "description": "Hit percentage over total cache decisions (hits + misses).",
+      "transparent": true
     },
     {
       "datasource": {
@@ -337,7 +351,9 @@
         }
       ],
       "title": "Cache Lookup Latency",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "p95 latency for cache lookup/update operations in gateway.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -385,7 +401,9 @@
         }
       ],
       "title": "Gateway -> Kafka Publish Latency (Frames Topic)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Latency to publish frame messages from gateway to Kafka frames topic.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -433,7 +451,9 @@
         }
       ],
       "title": "Gateway Write Failure Rates",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Per-second failure rates for gateway Kafka publish and websocket writes.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -474,7 +494,9 @@
         }
       ],
       "title": "Gateway Stale Result Drops",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Results dropped at gateway when superseded by newer frame output.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -487,7 +509,9 @@
       "id": 12,
       "panels": [],
       "title": "3) Kafka Bridge Between Gateway and Inference",
-      "type": "row"
+      "type": "row",
+      "description": "Topic handoff stage between gateway producer and inference consumer/publisher.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -534,9 +558,10 @@
           "refId": "B"
         }
       ],
-      "title": "Frames Topic Flow (Gateway -> Inference Client)",
-      "description": "Compares gateway publish rate vs inference-client consume rate on the frames topic. Sustained gap indicates queue buildup or consumer bottleneck.",
-      "type": "timeseries"
+      "title": "Frames Topic Flow (Gateway -> Inference)",
+      "type": "timeseries",
+      "description": "Compares gateway frame publish throughput with inference consume throughput to detect handoff lag.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -583,9 +608,10 @@
           "refId": "B"
         }
       ],
-      "title": "Detections Topic Flow (Inference Client -> Gateway)",
-      "description": "Compares inference-client result publish rate vs gateway consume rate on the detections topic. Gap indicates downstream lag.",
-      "type": "timeseries"
+      "title": "Detections Topic Flow (Inference -> Gateway)",
+      "type": "timeseries",
+      "description": "Compares inference result publish throughput with gateway consume throughput for detection return path health.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -597,9 +623,10 @@
       },
       "id": 15,
       "panels": [],
-      "title": "4) Inference Client Queue and Worker Pool",
-      "description": "These panels are scoped to job=\"inference\" and describe bridge-side queue pressure before Triton calls.",
-      "type": "row"
+      "title": "4) Inference Queue and Worker Pool",
+      "type": "row",
+      "description": "Inference bridge queue pressure and worker capacity before Triton execution.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -653,9 +680,10 @@
           "refId": "C"
         }
       ],
-      "title": "Inference Client Worker Pool State",
-      "description": "Queue depth, active workers, and configured capacity in the inference bridge process.",
-      "type": "timeseries"
+      "title": "Worker Pool State",
+      "type": "timeseries",
+      "description": "Queue depth, active workers, and configured capacity of the inference bridge pool.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -695,9 +723,10 @@
           "refId": "A"
         }
       ],
-      "title": "Inference Client Worker Utilization",
-      "description": "Active workers as a percentage of worker capacity. Near 100% with rising queue means saturation.",
-      "type": "timeseries"
+      "title": "Worker Utilization",
+      "type": "timeseries",
+      "description": "Percent of inference bridge worker capacity currently active.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -737,9 +766,10 @@
           "refId": "A"
         }
       ],
-      "title": "Inference Client Stale Frame Drops",
-      "description": "Frames dropped by inference bridge before compute when they exceed freshness threshold.",
-      "type": "timeseries"
+      "title": "Stale Frames Dropped in Inference",
+      "type": "timeseries",
+      "description": "Frames dropped by inference bridge due to staleness checks before compute.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -793,9 +823,10 @@
           "refId": "C"
         }
       ],
-      "title": "Inference Client Queue Wait Latency",
-      "description": "Time frames spend waiting in the local worker queue before processing starts.",
-      "type": "timeseries"
+      "title": "Worker Queue Wait Latency",
+      "type": "timeseries",
+      "description": "Time frames spend waiting in inference bridge queue before processing begins.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -807,9 +838,10 @@
       },
       "id": 20,
       "panels": [],
-      "title": "5) Inference Client Compute and Detection Output",
-      "description": "These panels are scoped to job=\"inference\" and track Triton call duration, processed throughput, and detection payload characteristics.",
-      "type": "row"
+      "title": "5) Inference Compute and Detection Output",
+      "type": "row",
+      "description": "Inference bridge compute latency, throughput, and detection output characteristics.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -863,9 +895,10 @@
           "refId": "C"
         }
       ],
-      "title": "Inference Client Duration",
-      "description": "End-to-end bridge inference time per frame (decode + preprocess + Triton request + postprocess).",
-      "type": "timeseries"
+      "title": "Inference Duration",
+      "type": "timeseries",
+      "description": "Per-frame inference processing duration in bridge (decode, preprocess, Triton call, postprocess).",
+      "transparent": true
     },
     {
       "datasource": {
@@ -912,9 +945,10 @@
           "refId": "B"
         }
       ],
-      "title": "Inference Client Throughput",
-      "description": "Frames successfully processed by inference bridge vs frames dropped as stale.",
-      "type": "timeseries"
+      "title": "Inference Throughput",
+      "type": "timeseries",
+      "description": "Processed versus dropped frame throughput in the inference bridge.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -961,9 +995,10 @@
           "refId": "B"
         }
       ],
-      "title": "Inference Client Detection Density",
-      "description": "Distribution of detections per frame from inference outputs; spikes can indicate scene complexity changes.",
-      "type": "timeseries"
+      "title": "Detection Density",
+      "type": "timeseries",
+      "description": "Distribution of detections per processed frame.",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -976,7 +1011,9 @@
       "id": 24,
       "panels": [],
       "title": "6) Result Publish and End-to-End Delivery",
-      "type": "row"
+      "type": "row",
+      "description": "Final delivery stage including result publish and client-visible latency.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1030,9 +1067,10 @@
           "refId": "C"
         }
       ],
-      "title": "Inference Client -> Kafka Publish Latency (Detections Topic)",
-      "description": "Latency to publish detection results from inference bridge to Kafka detections topic.",
-      "type": "timeseries"
+      "title": "Inference -> Kafka Publish Latency (Detections Topic)",
+      "type": "timeseries",
+      "description": "Latency to publish detection results from inference bridge to Kafka.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1072,9 +1110,10 @@
           "refId": "A"
         }
       ],
-      "title": "Inference Client Publish Failures",
-      "description": "Rate of result publish errors from inference bridge to Kafka detections topic.",
-      "type": "timeseries"
+      "title": "Inference Publish Failures",
+      "type": "timeseries",
+      "description": "Per-second failures while publishing inference results to Kafka.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1129,7 +1168,9 @@
         }
       ],
       "title": "End-to-End Client Latency",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Client-visible end-to-end latency percentiles measured at gateway.",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1205,7 +1246,9 @@
         }
       ],
       "title": "End-to-End Throughput Funnel",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Stage-by-stage throughput funnel from ingress to final detections delivery.",
+      "transparent": true
     }
   ],
   "refresh": "5s",
@@ -1229,5 +1272,6 @@
   "title": "OWL Server E2E Flow",
   "uid": "owl-server-e2e-flow",
   "version": 1,
-  "weekStart": ""
+  "weekStart": "",
+  "description": "Stage-by-stage server flow dashboard from websocket ingress through gateway, queueing, inference, publish, and end-to-end delivery."
 }
