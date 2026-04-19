@@ -1,0 +1,194 @@
+[
+  {
+    "cfg": {
+      "name": "1_baseline_w24_1inst_d25",
+      "workers": 24,
+      "instances": 1,
+      "delay_us": 25000
+    },
+    "client_stats": {
+      "frames_sent": 1483,
+      "frames_dropped": 3135,
+      "results_received": 434,
+      "avg_fps": 2.8,
+      "avg_inference_ms": 7020.2,
+      "avg_e2e_ms": 9728.3,
+      "cache_hit_rate": 0.0
+    },
+    "triton_metrics": {
+      "compute_ms_per_req": 2837.393351219512,
+      "queue_ms_per_req": 2579.82127804878,
+      "request_ms_per_req": 8385.29912195122,
+      "input_ms_per_req": 28.349207317073166,
+      "output_ms_per_req": 87.54740731707317,
+      "batch_size": 16.400000000000002,
+      "triton_req_per_s": 2.7300496980275373,
+      "gpu_util_avg_pct": 45.93333333333334,
+      "gpu_util_max_pct": 99.0,
+      "gpu_mem_used_gib": 3.3126302083333337,
+      "pending_avg": 7.333333333333333
+    },
+    "duration_s": 153.95917081832886,
+    "stdout_tail": "61\nFPS: 1.1 | Inference: 14381.3ms | E2E: 15588.4ms | Cache: 0% | Dropped: 261\nFPS: 1.1 | Inference: 14381.3ms | E2E: 15588.4ms | Cache: 0% | Dropped: 261\nFPS: 1.8 | Inference: 11382.3ms | E2E: 13258.4ms | Cache: 0% | Dropped: 520\nFPS: 1.8 | Inference: 11382.3ms | E2E: 13258.4ms | Cache: 0% | Dropped: 520\nFPS: 1.8 | Inference: 11382.3ms | E2E: 13258.4ms | Cache: 0% | Dropped: 520\nFPS: 2.4 | Inference: 8845.7ms | E2E: 10860.0ms | Cache: 0% | Dropped: 595\nFPS: 2.4 | Inference: 8845.7ms | E2E: 10860.0ms | Cache: 0% | Dropped: 595\nFPS: 2.4 | Inference: 8845.7ms | E2E: 10860.0ms | Cache: 0% | Dropped: 595\nFPS: 2.8 | Inference: 7578.3ms | E2E: 9589.0ms | Cache: 0% | Dropped: 696\nFPS: 2.8 | Inference: 7578.3ms | E2E: 9589.0ms | Cache: 0% | Dropped: 696\nFPS: 2.8 | Inference: 7578.3ms | E2E: 9589.0ms | Cache: 0% | Dropped: 696\nFPS: 3.1 | Inference: 6820.9ms | E2E: 8872.4ms | Cache: 0% | Dropped: 755\nFPS: 3.1 | Inference: 6820.9ms | E2E: 8872.4ms | Cache: 0% | Dropped: 755\nFPS: 3.1 | Inference: 6820.9ms | E2E: 8872.4ms | Cache: 0% | Dropped: 755\nFPS: 3.2 | Inference: 6071.2ms | E2E: 8510.6ms | Cache: 0% | Dropped: 1185\nFPS: 3.2 | Inference: 6071.2ms | E2E: 8510.6ms | Cache: 0% | Dropped: 1185\nFPS: 3.2 | Inference: 6071.2ms | E2E: 8510.6ms | Cache: 0% | Dropped: 1185\nFPS: 3.2 | Inference: 6071.2ms | E2E: 8510.6ms | Cache: 0% | Dropped: 1185\nFPS: 3.2 | Inference: 6071.2ms | E2E: 8510.6ms | Cache: 0% | Dropped: 1185\nFPS: 3.2 | Inference: 6071.2ms | E2E: 8510.6ms | Cache: 0% | Dropped: 1186\nFPS: 3.2 | Inference: 6071.2ms | E2E: 8510.6ms | Cache: 0% | Dropped: 1187\nFPS: 3.2 | Inference: 6071.2ms | E2E: 8510.6ms | Cache: 0% | Dropped: 1188\n\nVideo complete.\n\n--- Session stats ---\nFrames sent:     1483\nFrames dropped:  3135\nResults received: 434\nAvg FPS:         2.8\nAvg inference:   7020.2ms\nAvg E2E:         9728.3ms\nCache hit rate:  0.0%\n\n20:49:01 yolo_client INFO Connecting to ws://localhost:8080/ws\n20:49:01 yolo_client INFO Connected as client 3361b91a-33a4-40dd-a1e8-6c2005346ca2\n"
+  },
+  {
+    "cfg": {
+      "name": "2_w24_1inst_d50",
+      "workers": 24,
+      "instances": 1,
+      "delay_us": 50000
+    },
+    "client_stats": {
+      "frames_sent": 1157,
+      "frames_dropped": 3245,
+      "results_received": 347,
+      "avg_fps": 2.3,
+      "avg_inference_ms": 7913.8,
+      "avg_e2e_ms": 10657.1,
+      "cache_hit_rate": 0.0
+    },
+    "triton_metrics": {
+      "compute_ms_per_req": 3382.676178571428,
+      "queue_ms_per_req": 2966.8624702380953,
+      "request_ms_per_req": 9131.743613095237,
+      "input_ms_per_req": 21.773999999999997,
+      "output_ms_per_req": 35.99066071428571,
+      "batch_size": 14.608695652173912,
+      "triton_req_per_s": 2.3614633014434796,
+      "gpu_util_avg_pct": 42.42857142857142,
+      "gpu_util_max_pct": 91.0,
+      "gpu_mem_used_gib": 3.362583705357143,
+      "pending_avg": 8.071428571428571
+    },
+    "duration_s": 152.20857906341553,
+    "stdout_tail": "Connected as 3f6ac624-3638-48ef-a9d0-68a85da393a0\nRunning headless. Press Ctrl+C to quit.\n\nFPS: 1.5 | Inference: 13589.9ms | E2E: 15555.3ms | Cache: 0% | Dropped: 789\nFPS: 1.5 | Inference: 13589.9ms | E2E: 15555.3ms | Cache: 0% | Dropped: 789\nFPS: 1.5 | Inference: 13589.9ms | E2E: 15555.3ms | Cache: 0% | Dropped: 789\nFPS: 1.7 | Inference: 11891.4ms | E2E: 14052.2ms | Cache: 0% | Dropped: 860\nFPS: 1.7 | Inference: 11891.4ms | E2E: 14052.2ms | Cache: 0% | Dropped: 860\nFPS: 1.7 | Inference: 11891.4ms | E2E: 14052.2ms | Cache: 0% | Dropped: 860\nFPS: 2.1 | Inference: 9713.8ms | E2E: 12067.6ms | Cache: 0% | Dropped: 2020\nFPS: 2.1 | Inference: 9713.8ms | E2E: 12067.6ms | Cache: 0% | Dropped: 2020\nFPS: 2.1 | Inference: 9713.8ms | E2E: 12067.6ms | Cache: 0% | Dropped: 2020\nFPS: 2.1 | Inference: 9713.8ms | E2E: 12067.6ms | Cache: 0% | Dropped: 2020\nFPS: 2.3 | Inference: 8998.8ms | E2E: 11347.1ms | Cache: 0% | Dropped: 2099\nFPS: 2.3 | Inference: 8998.8ms | E2E: 11347.1ms | Cache: 0% | Dropped: 2099\nFPS: 2.3 | Inference: 8998.8ms | E2E: 11347.1ms | Cache: 0% | Dropped: 2099\nFPS: 2.3 | Inference: 8998.8ms | E2E: 11347.1ms | Cache: 0% | Dropped: 2099\n\nVideo complete.\n\n--- Session stats ---\nFrames sent:     1157\nFrames dropped:  3245\nResults received: 347\nAvg FPS:         2.3\nAvg inference:   7913.8ms\nAvg E2E:         10657.1ms\nCache hit rate:  0.0%\n\n20:52:20 yolo_client INFO Connecting to ws://localhost:8080/ws\n20:52:20 yolo_client INFO Connected as client 3f6ac624-3638-48ef-a9d0-68a85da393a0\n"
+  },
+  {
+    "cfg": {
+      "name": "3_w32_1inst_d50",
+      "workers": 32,
+      "instances": 1,
+      "delay_us": 50000
+    },
+    "client_stats": {
+      "frames_sent": 1361,
+      "frames_dropped": 3143,
+      "results_received": 429,
+      "avg_fps": 2.7,
+      "avg_inference_ms": 8420.8,
+      "avg_e2e_ms": 11797.4,
+      "cache_hit_rate": 0.0
+    },
+    "triton_metrics": {
+      "compute_ms_per_req": 3693.491127456689,
+      "queue_ms_per_req": 2842.9612431844535,
+      "request_ms_per_req": 10197.056644501985,
+      "input_ms_per_req": 36.91518232415106,
+      "output_ms_per_req": 46.11765118671355,
+      "batch_size": 16.763232665349513,
+      "triton_req_per_s": 2.8717269741936398,
+      "gpu_util_avg_pct": 42.5,
+      "gpu_util_max_pct": 99.0,
+      "gpu_mem_used_gib": 4.458217075892857,
+      "pending_avg": 4.785714285714286
+    },
+    "duration_s": 157.9061200618744,
+    "stdout_tail": " 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2515\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2516\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2517\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2518\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2519\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2520\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2521\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2522\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2523\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2524\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2525\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2526\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2527\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2528\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2529\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2530\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2531\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2532\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2533\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2534\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2535\nFPS: 2.8 | Inference: 9005.0ms | E2E: 12485.1ms | Cache: 0% | Dropped: 2536\n\nVideo complete.\n\n--- Session stats ---\nFrames sent:     1361\nFrames dropped:  3143\nResults received: 429\nAvg FPS:         2.7\nAvg inference:   8420.8ms\nAvg E2E:         11797.4ms\nCache hit rate:  0.0%\n\n20:55:34 yolo_client INFO Connecting to ws://localhost:8080/ws\n20:55:34 yolo_client INFO Connected as client e63966f3-357f-454f-a610-a67d16e58966\n"
+  },
+  {
+    "cfg": {
+      "name": "4_w40_1inst_d50",
+      "workers": 40,
+      "instances": 1,
+      "delay_us": 50000
+    },
+    "client_stats": {
+      "frames_sent": 1005,
+      "frames_dropped": 2719,
+      "results_received": 325,
+      "avg_fps": 2.2,
+      "avg_inference_ms": 14193.8,
+      "avg_e2e_ms": 16805.4,
+      "cache_hit_rate": 0.0
+    },
+    "triton_metrics": {
+      "compute_ms_per_req": 6511.872601665205,
+      "queue_ms_per_req": 5329.96985816558,
+      "request_ms_per_req": 16152.430200508255,
+      "input_ms_per_req": 38.585820144651414,
+      "output_ms_per_req": 77.90266786465868,
+      "batch_size": 25.38800722222222,
+      "triton_req_per_s": 2.2085170042383733,
+      "gpu_util_avg_pct": 50.92857142857143,
+      "gpu_util_max_pct": 97.0,
+      "gpu_mem_used_gib": 4.425990513392858,
+      "pending_avg": 8.714285714285715
+    },
+    "duration_s": 150.66019558906555,
+    "stdout_tail": ".6ms | Cache: 0% | Dropped: 1351\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1352\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1353\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1354\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1355\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1356\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1357\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1358\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1359\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1360\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1361\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1362\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1363\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1364\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1365\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1366\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1367\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1368\nFPS: 1.4 | Inference: 18144.0ms | E2E: 21237.6ms | Cache: 0% | Dropped: 1369\nFPS: 2.2 | Inference: 14063.5ms | E2E: 16815.3ms | Cache: 0% | Dropped: 2689\nFPS: 2.2 | Inference: 14063.5ms | E2E: 16815.3ms | Cache: 0% | Dropped: 2689\nFPS: 2.2 | Inference: 14063.5ms | E2E: 16815.3ms | Cache: 0% | Dropped: 2689\n\nVideo complete.\n\n--- Session stats ---\nFrames sent:     1005\nFrames dropped:  2719\nResults received: 325\nAvg FPS:         2.2\nAvg inference:   14193.8ms\nAvg E2E:         16805.4ms\nCache hit rate:  0.0%\n\n20:58:55 yolo_client INFO Connecting to ws://localhost:8080/ws\n20:58:55 yolo_client INFO Connected as client 7e82b4b7-82c4-46c2-a4a6-0b22711ce1bd\n"
+  },
+  {
+    "cfg": {
+      "name": "5_w24_2inst_d50",
+      "workers": 24,
+      "instances": 2,
+      "delay_us": 50000
+    },
+    "client_stats": {
+      "frames_sent": 1297,
+      "frames_dropped": 3305,
+      "results_received": 141,
+      "avg_fps": 1.0,
+      "avg_inference_ms": 9906.4,
+      "avg_e2e_ms": 11943.5,
+      "cache_hit_rate": 0.0
+    },
+    "triton_metrics": {
+      "compute_ms_per_req": 7987.523490990991,
+      "queue_ms_per_req": 2831.3424504504505,
+      "request_ms_per_req": 12404.451918918921,
+      "input_ms_per_req": 26.475067567567567,
+      "output_ms_per_req": 26.138729729729732,
+      "batch_size": 6.0,
+      "triton_req_per_s": 1.5672617450637738,
+      "gpu_util_avg_pct": 72.64285714285714,
+      "gpu_util_max_pct": 100.0,
+      "gpu_mem_used_gib": 4.8017578125,
+      "pending_avg": 5.357142857142858
+    },
+    "duration_s": 148.88525533676147,
+    "stdout_tail": "Connected as 34dcb29a-b35e-4118-a36b-797b68201a99\nRunning headless. Press Ctrl+C to quit.\n\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1630\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1630\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1630\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1630\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1630\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1630\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1630\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1631\nFPS: 0.8 | Inference: 9975.4ms | E2E: 12041.0ms | Cache: 0% | Dropped: 1632\nFPS: 1.0 | Inference: 9868.5ms | E2E: 11783.3ms | Cache: 0% | Dropped: 2629\nFPS: 1.0 | Inference: 9868.5ms | E2E: 11783.3ms | Cache: 0% | Dropped: 2629\n\nVideo complete.\n\n--- Session stats ---\nFrames sent:     1297\nFrames dropped:  3305\nResults received: 141\nAvg FPS:         1.0\nAvg inference:   9906.4ms\nAvg E2E:         11943.5ms\nCache hit rate:  0.0%\n\n21:02:09 yolo_client INFO Connecting to ws://localhost:8080/ws\n21:02:10 yolo_client INFO Connected as client 34dcb29a-b35e-4118-a36b-797b68201a99\n"
+  },
+  {
+    "cfg": {
+      "name": "6_w32_1inst_d100",
+      "workers": 32,
+      "instances": 1,
+      "delay_us": 100000
+    },
+    "client_stats": {
+      "frames_sent": 864,
+      "frames_dropped": 3296,
+      "results_received": 273,
+      "avg_fps": 1.8,
+      "avg_inference_ms": 13696.3,
+      "avg_e2e_ms": 16378.7,
+      "cache_hit_rate": 0.0
+    },
+    "triton_metrics": {
+      "compute_ms_per_req": 7201.733351648351,
+      "queue_ms_per_req": 4714.056783882784,
+      "request_ms_per_req": 15141.930076923078,
+      "input_ms_per_req": 28.736014652014653,
+      "output_ms_per_req": 38.244131868131866,
+      "batch_size": 17.0625,
+      "triton_req_per_s": 1.8402479182437546,
+      "gpu_util_avg_pct": 60.4,
+      "gpu_util_max_pct": 99.0,
+      "gpu_mem_used_gib": 3.1067708333333335,
+      "pending_avg": 9.266666666666667
+    },
+    "duration_s": 150.44175601005554,
+    "stdout_tail": "9.8ms | Cache: 0% | Dropped: 3240\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3241\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3242\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3243\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3244\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3245\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3246\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3247\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3248\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3249\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3250\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3251\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3252\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3253\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3254\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3255\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3256\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3257\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3258\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3259\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3260\nFPS: 1.8 | Inference: 13797.9ms | E2E: 16479.8ms | Cache: 0% | Dropped: 3261\n\nVideo complete.\n\n--- Session stats ---\nFrames sent:     864\nFrames dropped:  3296\nResults received: 273\nAvg FPS:         1.8\nAvg inference:   13696.3ms\nAvg E2E:         16378.7ms\nCache hit rate:  0.0%\n\n21:05:23 yolo_client INFO Connecting to ws://localhost:8080/ws\n21:05:23 yolo_client INFO Connected as client 16dea630-7b10-405c-98f9-9893bff2e3bb\n"
+  }
+]
