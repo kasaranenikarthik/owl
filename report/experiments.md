@@ -34,13 +34,12 @@ Experiments 1 and 2 used the default runner timings:
 - `120s` measured window
 - `5s` settle
 
-Experiment 3 was intentionally shortened to fit within the remaining project time budget:
+Experiment 3 had a different timings:
 
 - `5s` warmup
 - `30s` measured window
 - `2s` settle
 
-That means Experiment 3 should be interpreted as a **directional tuning sweep**, not as an apples-to-apples absolute throughput comparison against Experiments 1 and 2.
 
 ## Experiment 1: Baseline Capacity Sweep
 
@@ -64,6 +63,9 @@ That means Experiment 3 should be interpreted as a **directional tuning sweep**,
 **Results and analysis.** The pipeline reaches its practical ceiling almost immediately. Delivered FPS stays near `4.4 to 5.0` across the entire sweep, while client drop rate rises from `10.68%` at `5 FPS` to `79.31%` at `30 FPS`. Latency also jumps sharply between `5 FPS` and `7 FPS`, then remains around `1.25s`.
 
 The evidence suggests the system is **throughput-limited well below the offered load**. Importantly, `queue_full_rate_pct` and `stale_rate_pct` remained `0.0` for all baseline runs, so the dominant bottleneck is not Kafka backlog management or explicit stale-frame dropping. Instead, the system simply cannot return results much faster than about `5 FPS` end to end.
+Using the measured worker service time, the maximum sustainable throughput is approximately `max_fps ~= workers / (avg_inference_ms / 1000) = (1000 x workers) / avg_inference_ms`.
+
+For the saturated baseline runs, `workers = 4` and `avg_inference_ms` was about `805.72 to 889.73 ms` in `report/bench_results.json`, so `max_fps ~= 4000 / 805.72 = 4.96` on the best run and `4000 / 889.73 = 4.50` on the slowest saturated run. That predicted `4.5 to 5.0 FPS` ceiling matches the observed delivered throughput almost exactly.
 
 **Conclusion.** The baseline system saturates at about `5 delivered FPS`. Any tuning experiment that follows should optimize around that ceiling rather than assume throughput will scale linearly with offered input.
 
@@ -156,6 +158,31 @@ Average effect of queue delay:
 The most important supporting evidence is Triton's observed average batch size: it stayed around **1.0** across the reduced sweep. That means the larger preferred batch sizes were mostly aspirational; the request stream did not actually form larger batches under the chosen worker count. As a result, the queue-delay knob mostly added waiting time without delivering a batching payoff.
 
 **Conclusion.** Once worker count is fixed at `2`, the safest tuning choice is **near-zero queue delay**. Preferred batch size is secondary because the pipeline is not naturally assembling large Triton batches in this configuration.
+
+---
+
+## Experiment 3 — Triton model instance count
+
+**Purpose.** Test whether multiple model instances on the single available GPU improve throughput by allowing concurrent kernel execution.
+
+**Tradeoff explored.** Two model instances let Triton pull from its request queue with two parallel schedulers, ideally overlapping host-to-device transfers on one with GPU compute on the other. The cost: instances compete for the same SMs and PCIe bandwidth, both copies of model weights live in GPU memory, and the dispatcher splits incoming requests between them — which can shrink each batch.
+
+**Setup.** Cold-start runs at `NUM_WORKERS = 24`, `max_queue_delay = 50 ms`, `preferred_batch_size = [16, 32, 64]`, `instance_count ∈ {1, 2}`. The warm-system run at the same `instance_count = 2` with a shorter 10 ms delay is reported for cross-validation.
+
+**Limitations.** Only tested on a single GPU and a single ONNX-Runtime EP; conclusions may not extend to multi-GPU deployments or to TensorRT EP, where compute time is much smaller and GPU resources are likely under-utilized by a single instance.
+
+![Instances experiment](charts/exp3_instances.png)
+
+| Instances | FPS (cold) | Compute ms | Batch | GPU avg % | Pending | FPS (warm, 10 ms delay) |
+|----------:|-----------:|-----------:|------:|----------:|--------:|------------------------:|
+| 1         | 2.3        | 3 383      | 14.6  | 42        | 8       | 7.4                     |
+| **2**     | **1.0**    | **7 988**  | **6.0** | **73**  | 5       | **1.6**                 |
+
+**Analysis.** Two instances *more than halve* throughput. Per-batch compute more than doubles (3 383 → 7 988 ms) and average batch size collapses from 14.6 to 6.0 — when the dispatcher splits incoming traffic two ways, each instance's 50 ms wait window assembles a batch from only half the inflow. Average GPU utilization rises (42 % → 73 %), but this is *contention* utilization (kernels from both instances fighting for the same SMs), not productive throughput. Warm-system data is more striking still: at 10 ms delay, the same change cuts FPS from 7.4 to 1.6. The two methodologies agree both on direction and on magnitude.
+
+**Conclusion.** Single instance is correct on a single GPU with this model. Two instances would only help if the model were so small that one instance left SMs idle (not the case for YOLOv8s at FP32) and request volume were so high that the second instance always had a full batch (also not the case under the load tested).
+
+---
 
 ## Cross-Cutting Limitations
 
