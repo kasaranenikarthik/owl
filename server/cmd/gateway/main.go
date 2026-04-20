@@ -97,7 +97,9 @@ func main() {
 	defer cancel()
 
 	simCache := mustCreateSimilarityCache(cfg, logger)
-	defer simCache.Close()
+	if simCache != nil {
+		defer simCache.Close()
+	}
 
 	producer := mustCreateProducer(cfg, logger)
 	defer producer.Close()
@@ -120,6 +122,10 @@ func newLogger() *slog.Logger {
 }
 
 func mustCreateSimilarityCache(cfg config.Config, logger *slog.Logger) *similarity.Cache {
+	if cfg.SimilarityThreshold < 0 {
+		logger.Info("similarity cache disabled", "threshold", cfg.SimilarityThreshold)
+		return nil
+	}
 	simCache, err := similarity.NewCache(cfg.RedisAddr, cfg.CacheTTLSeconds, cfg.SimilarityThreshold, logger)
 	if err != nil {
 		logger.Error("redis connect failed", "error", err)
@@ -146,8 +152,8 @@ func startDetectionsConsumer(ctx context.Context, cfg config.Config, logger *slo
 		cfg.KafkaBrokers,
 		"gateway-detections",
 		[]string{cfg.DetectionsTopic},
-		func(ctx context.Context, key, value []byte) error {
-			return handleDetectionResult(ctx, value, simCache, reg)
+		func(ctx context.Context, msg kafka.Message) error {
+			return handleDetectionResult(ctx, msg.Value, simCache, reg)
 		},
 		logger,
 	)
@@ -171,7 +177,9 @@ func handleDetectionResult(ctx context.Context, value []byte, simCache *similari
 		return fmt.Errorf("unmarshal detection: %w", err)
 	}
 
-	simCache.StoreResult(ctx, internal.ClientID, internal)
+	if simCache != nil {
+		simCache.StoreResult(ctx, internal.ClientID, internal)
+	}
 
 	c, ok := reg.Get(internal.ClientID)
 	if !ok {
@@ -242,7 +250,9 @@ func handleWS(ctx context.Context, cfg config.Config, logger *slog.Logger, simCa
 
 	defer func() {
 		reg.Remove(clientID)
-		simCache.RemoveClient(ctx, clientID)
+		if simCache != nil {
+			simCache.RemoveClient(ctx, clientID)
+		}
 		logger.Info("client disconnected", "client_id", clientID)
 	}()
 
@@ -271,44 +281,47 @@ func processFrame(ctx context.Context, cfg config.Config, logger *slog.Logger, s
 	frameID := c.frameSeq.Add(1)
 	now := time.Now()
 
-	cacheStart := time.Now()
-	frameHash, hashErr := similarity.AverageHash(data)
-	if hashErr == nil {
-		cached, hit, err := simCache.CheckAndUpdate(ctx, clientID, frameHash, data)
+	if simCache != nil {
+		cacheStart := time.Now()
+		frameHash, hashErr := similarity.AverageHash(data)
+		if hashErr == nil {
+			cached, hit, err := simCache.CheckAndUpdate(ctx, clientID, frameHash, data)
+			metrics.CacheLookupDuration.Observe(time.Since(cacheStart).Seconds())
+			if err != nil {
+				logger.Warn("similarity cache check failed", "client_id", clientID, "error", err)
+			}
+			if hit && cached != nil {
+				metrics.CacheHits.Inc()
+				c.latestSentID.Store(frameID)
+				clientResult := models.ClientResult{
+					FrameID:     frameID,
+					Detections:  cached.Detections,
+					InferenceMs: cached.InferenceMs,
+					FromCache:   true,
+					Timestamp:   now,
+				}
+				if err := c.SendJSON(clientResult); err != nil {
+					return fmt.Errorf("send cached result: %w", err)
+				}
+				return nil
+			}
+		}
 		metrics.CacheLookupDuration.Observe(time.Since(cacheStart).Seconds())
-		if err != nil {
-			logger.Warn("similarity cache check failed", "client_id", clientID, "error", err)
-		}
-		if hit && cached != nil {
-			metrics.CacheHits.Inc()
-			c.latestSentID.Store(frameID)
-			clientResult := models.ClientResult{
-				FrameID:     frameID,
-				Detections:  cached.Detections,
-				InferenceMs: cached.InferenceMs,
-				FromCache:   true,
-				Timestamp:   now,
-			}
-			if err := c.SendJSON(clientResult); err != nil {
-				return fmt.Errorf("send cached result: %w", err)
-			}
-			return nil
-		}
 	}
-	metrics.CacheLookupDuration.Observe(time.Since(cacheStart).Seconds())
 
 	metrics.CacheMisses.Inc()
 	c.pending.Store(frameID, now)
 
-	frame := models.FrameMessage{
-		ClientID:  clientID,
-		FrameID:   frameID,
-		Timestamp: now,
-		Data:      data,
-	}
-
 	publishStart := time.Now()
-	if err := producer.Publish(cfg.FramesTopic, clientID, frame); err != nil {
+	if err := producer.PublishBytes(
+		cfg.FramesTopic,
+		clientID,
+		data,
+		[]kafka.Header{
+			{Key: "frame_id", Value: []byte(fmt.Sprintf("%d", frameID))},
+			{Key: "timestamp_unix_nano", Value: []byte(fmt.Sprintf("%d", now.UnixNano()))},
+		},
+	); err != nil {
 		metrics.FramePublishDuration.Observe(time.Since(publishStart).Seconds())
 		metrics.FramePublishFailures.Inc()
 		return fmt.Errorf("kafka publish: %w", err)
@@ -337,6 +350,7 @@ func runHTTPServer(ctx context.Context, cfg config.Config, logger *slog.Logger, 
 	}()
 
 	logger.Info("gateway starting", "port", cfg.HTTPPort)
+	logger.Info("frame transport mode", "service", "gateway", "frames_topic_encoding", "raw_bytes_with_headers_v1")
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)

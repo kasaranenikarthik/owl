@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -91,6 +90,7 @@ func main() {
 		"triton", tritonAddr,
 		"workers", numWorkers,
 		"group", cfg.ConsumerGroup,
+		"frames_topic_encoding", "raw_bytes_with_headers_v1",
 	)
 	if err := consumer.Run(ctx); err != nil {
 		logger.Error("consumer exited", "error", err)
@@ -155,6 +155,8 @@ type workerPool struct {
 	topic       string
 	logger      *slog.Logger
 	maxFrameAge time.Duration
+	batchSize   int
+	batchWait   time.Duration
 
 	pendingMu sync.Mutex
 	pending   map[string]frameJob
@@ -170,6 +172,14 @@ func newWorkerPool(
 	logger *slog.Logger,
 ) *workerPool {
 	maxFrameAge := time.Duration(envInt("STALE_FRAME_THRESHOLD_MS", 5000)) * time.Millisecond
+	batchSize := envInt("MICROBATCH_MAX_SIZE", 4)
+	if batchSize < 1 {
+		batchSize = 1
+	}
+	batchWaitMs := envInt("MICROBATCH_WAIT_MS", 2)
+	if batchWaitMs < 0 {
+		batchWaitMs = 0
+	}
 	queueSize := n * 4
 	p := &workerPool{
 		jobs:        make(chan string, queueSize),
@@ -178,6 +188,8 @@ func newWorkerPool(
 		topic:       topic,
 		logger:      logger,
 		maxFrameAge: maxFrameAge,
+		batchSize:   batchSize,
+		batchWait:   time.Duration(batchWaitMs) * time.Millisecond,
 		pending:     make(map[string]frameJob),
 		queued:      make(map[string]bool),
 	}
@@ -191,20 +203,54 @@ func newWorkerPool(
 		"workers", n,
 		"queue_slots", queueSize,
 		"stale_threshold_ms", maxFrameAge.Milliseconds(),
+		"microbatch_max_size", batchSize,
+		"microbatch_wait_ms", batchWaitMs,
 	)
 	return p
 }
 
-func (p *workerPool) dispatch(ctx context.Context, key, value []byte) error {
+func frameFromKafkaMessage(msg kafka.Message) (models.FrameMessage, error) {
+	clientID := string(msg.Key)
+	if clientID == "" {
+		return models.FrameMessage{}, fmt.Errorf("missing client key")
+	}
+
+	frameIDBytes, ok := msg.Headers["frame_id"]
+	if !ok {
+		return models.FrameMessage{}, fmt.Errorf("missing frame_id header")
+	}
+	frameID, err := strconv.ParseUint(string(frameIDBytes), 10, 64)
+	if err != nil {
+		return models.FrameMessage{}, fmt.Errorf("parse frame_id: %w", err)
+	}
+
+	timestampBytes, ok := msg.Headers["timestamp_unix_nano"]
+	if !ok {
+		return models.FrameMessage{}, fmt.Errorf("missing timestamp_unix_nano header")
+	}
+	timestampNanos, err := strconv.ParseInt(string(timestampBytes), 10, 64)
+	if err != nil {
+		return models.FrameMessage{}, fmt.Errorf("parse timestamp_unix_nano: %w", err)
+	}
+
+	return models.FrameMessage{
+		ClientID:  clientID,
+		FrameID:   frameID,
+		Timestamp: time.Unix(0, timestampNanos),
+		Data:      msg.Value,
+	}, nil
+}
+
+func (p *workerPool) dispatch(ctx context.Context, msg kafka.Message) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
 
-	var frame models.FrameMessage
-	if err := json.Unmarshal(value, &frame); err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
+	frame, err := frameFromKafkaMessage(msg)
+	if err != nil {
+		return fmt.Errorf("decode frame message: %w", err)
 	}
 	metrics.InferenceFramesConsumed.Inc()
 	if time.Since(frame.Timestamp) > p.maxFrameAge {
@@ -254,54 +300,138 @@ func (p *workerPool) worker(ctx context.Context, id int) {
 				return
 			}
 
-			p.pendingMu.Lock()
-			job, exists := p.pending[clientID]
-			delete(p.pending, clientID)
-			p.queued[clientID] = false
-			queueDepth := len(p.jobs)
-			p.pendingMu.Unlock()
-
-			metrics.WorkerPoolQueueDepth.Set(float64(queueDepth))
-			if !exists {
+			batch := p.collectBatch(ctx, clientID)
+			if len(batch) == 0 {
 				continue
 			}
-			metrics.WorkerQueueWaitDuration.Observe(time.Since(job.enqueuedAt).Seconds())
-			p.processJob(ctx, job)
+			p.processBatch(ctx, batch)
 		}
 	}
 }
 
-func (p *workerPool) processJob(ctx context.Context, job frameJob) {
+func (p *workerPool) takePendingJob(clientID string) (frameJob, bool, int) {
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+
+	job, exists := p.pending[clientID]
+	delete(p.pending, clientID)
+	p.queued[clientID] = false
+	return job, exists, len(p.jobs)
+}
+
+func (p *workerPool) collectBatch(ctx context.Context, firstClientID string) []frameJob {
+	assemblyStart := time.Now()
+	batch := make([]frameJob, 0, p.batchSize)
+
+	appendJob := func(clientID string) bool {
+		job, exists, queueDepth := p.takePendingJob(clientID)
+		metrics.WorkerPoolQueueDepth.Set(float64(queueDepth))
+		if !exists {
+			return false
+		}
+		metrics.WorkerQueueWaitDuration.Observe(time.Since(job.enqueuedAt).Seconds())
+		batch = append(batch, job)
+		return true
+	}
+
+	appendJob(firstClientID)
+	if len(batch) == 0 || p.batchSize == 1 {
+		metrics.MicrobatchSize.Observe(float64(len(batch)))
+		metrics.MicrobatchAssemblyDuration.Observe(time.Since(assemblyStart).Seconds())
+		return batch
+	}
+
+	for len(batch) < p.batchSize {
+		select {
+		case clientID, ok := <-p.jobs:
+			if !ok {
+				metrics.MicrobatchSize.Observe(float64(len(batch)))
+				metrics.MicrobatchAssemblyDuration.Observe(time.Since(assemblyStart).Seconds())
+				return batch
+			}
+			appendJob(clientID)
+		default:
+			goto maybeWait
+		}
+	}
+
+	metrics.MicrobatchSize.Observe(float64(len(batch)))
+	metrics.MicrobatchAssemblyDuration.Observe(time.Since(assemblyStart).Seconds())
+	return batch
+
+maybeWait:
+	if p.batchWait <= 0 {
+		metrics.MicrobatchSize.Observe(float64(len(batch)))
+		metrics.MicrobatchAssemblyDuration.Observe(time.Since(assemblyStart).Seconds())
+		return batch
+	}
+
+	timer := time.NewTimer(p.batchWait)
+	defer timer.Stop()
+
+	for len(batch) < p.batchSize {
+		select {
+		case <-ctx.Done():
+			metrics.MicrobatchSize.Observe(float64(len(batch)))
+			metrics.MicrobatchAssemblyDuration.Observe(time.Since(assemblyStart).Seconds())
+			return batch
+		case <-timer.C:
+			metrics.MicrobatchSize.Observe(float64(len(batch)))
+			metrics.MicrobatchAssemblyDuration.Observe(time.Since(assemblyStart).Seconds())
+			return batch
+		case clientID, ok := <-p.jobs:
+			if !ok {
+				metrics.MicrobatchSize.Observe(float64(len(batch)))
+				metrics.MicrobatchAssemblyDuration.Observe(time.Since(assemblyStart).Seconds())
+				return batch
+			}
+			appendJob(clientID)
+		}
+	}
+
+	metrics.MicrobatchSize.Observe(float64(len(batch)))
+	metrics.MicrobatchAssemblyDuration.Observe(time.Since(assemblyStart).Seconds())
+	return batch
+}
+
+func (p *workerPool) processBatch(ctx context.Context, jobs []frameJob) {
 	metrics.WorkerPoolActive.Inc()
 	defer metrics.WorkerPoolActive.Dec()
 
-	frame := job.frame
-	dets, ms, err := p.ic.Infer(ctx, frame.Data)
+	frames := make([]models.FrameMessage, len(jobs))
+	for i, job := range jobs {
+		frames[i] = job.frame
+	}
+
+	detectionsByFrame, ms, err := p.ic.InferBatch(ctx, frames)
 	if err != nil {
-		p.logger.Warn("inference failed", "client_id", frame.ClientID, "error", err)
+		p.logger.Warn("inference batch failed", "batch_size", len(jobs), "error", err)
 		return
 	}
 
-	metrics.FramesProcessed.Inc()
-	metrics.InferenceDuration.Observe(ms / 1000.0)
-	metrics.DetectionsPerFrame.Observe(float64(len(dets)))
+	for index, frame := range frames {
+		dets := detectionsByFrame[index]
+		metrics.FramesProcessed.Inc()
+		metrics.InferenceDuration.Observe(ms / 1000.0)
+		metrics.DetectionsPerFrame.Observe(float64(len(dets)))
 
-	result := models.InternalResult{
-		ClientID:    frame.ClientID,
-		FrameID:     frame.FrameID,
-		Detections:  dets,
-		InferenceMs: ms,
-		Timestamp:   time.Now(),
-	}
-	publishStart := time.Now()
-	if err := p.prod.Publish(p.topic, frame.ClientID, result); err != nil {
+		result := models.InternalResult{
+			ClientID:    frame.ClientID,
+			FrameID:     frame.FrameID,
+			Detections:  dets,
+			InferenceMs: ms,
+			Timestamp:   time.Now(),
+		}
+		publishStart := time.Now()
+		if err := p.prod.Publish(p.topic, frame.ClientID, result); err != nil {
+			metrics.ResultPublishDuration.Observe(time.Since(publishStart).Seconds())
+			metrics.ResultPublishFailures.Inc()
+			p.logger.Warn("publish failed", "client_id", frame.ClientID, "frame_id", frame.FrameID, "error", err)
+			continue
+		}
 		metrics.ResultPublishDuration.Observe(time.Since(publishStart).Seconds())
-		metrics.ResultPublishFailures.Inc()
-		p.logger.Warn("publish failed", "client_id", frame.ClientID, "error", err)
-		return
+		metrics.InferenceResultsPublished.Inc()
 	}
-	metrics.ResultPublishDuration.Observe(time.Since(publishStart).Seconds())
-	metrics.InferenceResultsPublished.Inc()
 }
 
 func (p *workerPool) Shutdown() {
@@ -319,31 +449,77 @@ type inferenceClient struct {
 	logger     *slog.Logger
 }
 
-func (ic *inferenceClient) Infer(ctx context.Context, jpegData []byte) ([]models.Detection, float64, error) {
+func (ic *inferenceClient) InferBatch(ctx context.Context, frames []models.FrameMessage) ([][]models.Detection, float64, error) {
 	start := time.Now()
-
-	// Decode JPEG
-	img, err := jpeg.Decode(bytes.NewReader(jpegData))
-	if err != nil {
-		return nil, 0, fmt.Errorf("decode: %w", err)
+	if len(frames) == 0 {
+		return nil, 0, nil
 	}
 
-	bounds := img.Bounds()
-	origW, origH := float32(bounds.Dx()), float32(bounds.Dy())
-	inputData, release, err := preprocess(img)
-	if err != nil {
-		return nil, 0, fmt.Errorf("preprocess: %w", err)
-	}
-	defer release()
+	batchSize := len(frames)
+	const inputSampleSize = 3 * inputH * inputW
+	batchedInput := make([]float32, batchSize*inputSampleSize)
+	origDims := make([]struct {
+		width  float32
+		height float32
+	}, batchSize)
 
-	output, err := ic.client.Infer(inputData, 1, 3, inputH, inputW)
+	releases := make([]func(), 0, batchSize)
+	defer func() {
+		for _, release := range releases {
+			release()
+		}
+	}()
+
+	for index, frame := range frames {
+		decodeStart := time.Now()
+		img, err := jpeg.Decode(bytes.NewReader(frame.Data))
+		metrics.DecodeDuration.Observe(time.Since(decodeStart).Seconds())
+		if err != nil {
+			return nil, 0, fmt.Errorf("decode frame %d: %w", index, err)
+		}
+
+		bounds := img.Bounds()
+		origDims[index].width = float32(bounds.Dx())
+		origDims[index].height = float32(bounds.Dy())
+
+		preprocessStart := time.Now()
+		inputData, release, err := preprocess(img)
+		metrics.PreprocessDuration.Observe(time.Since(preprocessStart).Seconds())
+		if err != nil {
+			return nil, 0, fmt.Errorf("preprocess frame %d: %w", index, err)
+		}
+		releases = append(releases, release)
+		copy(batchedInput[index*inputSampleSize:(index+1)*inputSampleSize], inputData)
+	}
+
+	tritonStart := time.Now()
+	output, err := ic.client.Infer(batchedInput, batchSize, 3, inputH, inputW)
+	metrics.TritonRoundTripDuration.Observe(time.Since(tritonStart).Seconds())
 	if err != nil {
 		return nil, 0, fmt.Errorf("triton: %w", err)
 	}
 
-	dets := postprocess(output, origW, origH, ic.confThresh)
+	const outputSampleSize = (4 + 80) * 8400
+	if len(output) < batchSize*outputSampleSize {
+		return nil, 0, fmt.Errorf("unexpected output size: got %d floats for batch=%d", len(output), batchSize)
+	}
+
+	detectionsByFrame := make([][]models.Detection, batchSize)
+	for index := range frames {
+		postprocessStart := time.Now()
+		startOffset := index * outputSampleSize
+		endOffset := startOffset + outputSampleSize
+		detectionsByFrame[index] = postprocess(
+			output[startOffset:endOffset],
+			origDims[index].width,
+			origDims[index].height,
+			ic.confThresh,
+		)
+		metrics.PostprocessDuration.Observe(time.Since(postprocessStart).Seconds())
+	}
+
 	ms := time.Since(start).Seconds() * 1000
-	return dets, ms, nil
+	return detectionsByFrame, ms, nil
 }
 
 func (ic *inferenceClient) Close() { ic.client.Close() }

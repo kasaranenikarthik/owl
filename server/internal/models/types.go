@@ -6,7 +6,7 @@ package models
 
 import "time"
 
-// FrameMessage is the internal Kafka message from gateway → inference.
+// FrameMessage is the in-memory frame representation used by the inference bridge.
 type FrameMessage struct {
 	ClientID  string    `json:"client_id"`
 	FrameID   uint64    `json:"frame_id"` // gateway-assigned, monotonically increasing per client

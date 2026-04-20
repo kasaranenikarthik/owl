@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass, field
 from statistics import fmean
 
+import cv2
 import websockets
 
 try:
@@ -116,7 +117,16 @@ class BenchmarkRealtimeClient:
         except asyncio.QueueFull:
             self.stats.send_queue_drops += 1
 
-    async def stream_video(self, video_path: str, *, fps: int, duration_seconds: float, jpeg_quality: int = 80) -> None:
+    async def stream_video(
+        self,
+        video_path: str,
+        *,
+        fps: int,
+        duration_seconds: float,
+        jpeg_quality: int = 80,
+        resize_width: int | None = None,
+        resize_height: int | None = None,
+    ) -> None:
         source = VideoFileSource(video_path)
         interval = 1.0 / fps
         deadline = time.monotonic() + duration_seconds
@@ -129,6 +139,8 @@ class BenchmarkRealtimeClient:
                     break
 
                 self.stats.frames_read += 1
+                if resize_width is not None and resize_height is not None:
+                    frame = cv2.resize(frame, (resize_width, resize_height), interpolation=cv2.INTER_AREA)
                 self.queue_frame(encode_jpeg(frame, jpeg_quality))
 
                 delay = interval - (time.monotonic() - loop_started_at)
@@ -202,6 +214,8 @@ async def run_benchmark_session(
     settle_seconds: float = 5.0,
     jpeg_quality: int = 80,
     send_queue_size: int = 10,
+    resize_width: int | None = None,
+    resize_height: int | None = None,
 ) -> dict[str, object]:
     clients = [
         BenchmarkRealtimeClient(server_url, send_queue_size=send_queue_size, name=f"client-{index + 1}")
@@ -219,6 +233,8 @@ async def run_benchmark_session(
                 fps=fps,
                 duration_seconds=duration_seconds,
                 jpeg_quality=jpeg_quality,
+                resize_width=resize_width,
+                resize_height=resize_height,
             )
         )
         for client in clients

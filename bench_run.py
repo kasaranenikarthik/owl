@@ -51,6 +51,12 @@ TOPICS = ("frames", "detections")
 PROM_QUERY_NAMES = (
     "gateway_p95_e2e_ms",
     "worker_queue_p95_ms",
+    "decode_p95_ms",
+    "preprocess_p95_ms",
+    "triton_roundtrip_p95_ms",
+    "postprocess_p95_ms",
+    "microbatch_avg_size",
+    "microbatch_assembly_p95_ms",
     "frames_consumed",
     "queue_full_count",
     "stale_count",
@@ -196,6 +202,22 @@ def parse_args() -> argparse.Namespace:
         help="Per-client benchmark send queue size.",
     )
     parser.add_argument(
+        "--client-count",
+        type=int,
+        default=1,
+        help="Number of concurrent benchmark clients to run.",
+    )
+    parser.add_argument(
+        "--resize-width",
+        type=int,
+        help="Optional client-side resize width before JPEG encode.",
+    )
+    parser.add_argument(
+        "--resize-height",
+        type=int,
+        help="Optional client-side resize height before JPEG encode.",
+    )
+    parser.add_argument(
         "--through-stage",
         choices=("baseline", "stage2", "stage3", "stage4"),
         default="stage4",
@@ -243,6 +265,14 @@ def parse_args() -> argparse.Namespace:
         help="Log verbosity.",
     )
     args = parser.parse_args()
+    if (args.resize_width is None) != (args.resize_height is None):
+        parser.error("--resize-width and --resize-height must be provided together")
+    if args.resize_width is not None and args.resize_width <= 0:
+        parser.error("--resize-width must be > 0")
+    if args.resize_height is not None and args.resize_height <= 0:
+        parser.error("--resize-height must be > 0")
+    if args.client_count <= 0:
+        parser.error("--client-count must be > 0")
     validate_filter_values(parser, "--workers", args.workers, WORKER_VALUES)
     validate_filter_values(parser, "--fps", args.fps, OFFERED_FPS_VALUES)
     validate_filter_values(parser, "--queue-delay-ms", args.queue_delay_ms, QUEUE_DELAY_VALUES_MS)
@@ -582,6 +612,25 @@ def collect_prometheus_metrics(base_url: str, query_time: float, window_seconds:
         "worker_queue_p95_ms": (
             f"histogram_quantile(0.95, sum(rate(yolo_worker_queue_wait_seconds_bucket[{window}])) by (le)) * 1000"
         ),
+        "decode_p95_ms": (
+            f"histogram_quantile(0.95, sum(rate(yolo_decode_seconds_bucket[{window}])) by (le)) * 1000"
+        ),
+        "preprocess_p95_ms": (
+            f"histogram_quantile(0.95, sum(rate(yolo_preprocess_seconds_bucket[{window}])) by (le)) * 1000"
+        ),
+        "triton_roundtrip_p95_ms": (
+            f"histogram_quantile(0.95, sum(rate(yolo_triton_roundtrip_seconds_bucket[{window}])) by (le)) * 1000"
+        ),
+        "postprocess_p95_ms": (
+            f"histogram_quantile(0.95, sum(rate(yolo_postprocess_seconds_bucket[{window}])) by (le)) * 1000"
+        ),
+        "microbatch_avg_size": (
+            f"sum(rate(yolo_microbatch_size_sum[{window}])) / "
+            f"clamp_min(sum(rate(yolo_microbatch_size_count[{window}])), 1)"
+        ),
+        "microbatch_assembly_p95_ms": (
+            f"histogram_quantile(0.95, sum(rate(yolo_microbatch_assembly_seconds_bucket[{window}])) by (le)) * 1000"
+        ),
         "frames_consumed": f"sum(increase(yolo_frames_consumed_total[{window}]))",
         "queue_full_count": (
             f"sum(increase(yolo_frames_dropped_reason_total{{reason=\"queue_full\"}}[{window}]))"
@@ -724,6 +773,8 @@ def build_ranking(config: RunConfig, client: dict[str, Any], prometheus: dict[st
 
 def execute_run(config: RunConfig, args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, float], dict[str, float], list[str]]:
     notes: list[str] = []
+    if args.resize_width is not None and args.resize_height is not None:
+        notes.append(f"client_resize={args.resize_width}x{args.resize_height}")
     temp_config = write_temp_triton_config(config)
     compose_env = build_compose_env(config, temp_config)
 
@@ -743,6 +794,8 @@ def execute_run(config: RunConfig, args: argparse.Namespace) -> tuple[dict[str, 
             settle_seconds=min(args.settle_seconds, 2.0),
             jpeg_quality=args.jpeg_quality,
             send_queue_size=args.send_queue_size,
+            resize_width=args.resize_width,
+            resize_height=args.resize_height,
         )
         stop_run_services()
         reset_runtime_state()
@@ -759,6 +812,8 @@ def execute_run(config: RunConfig, args: argparse.Namespace) -> tuple[dict[str, 
         settle_seconds=args.settle_seconds,
         jpeg_quality=args.jpeg_quality,
         send_queue_size=args.send_queue_size,
+        resize_width=args.resize_width,
+        resize_height=args.resize_height,
     )
     measured_finished_at = time.time()
 
@@ -814,7 +869,7 @@ def build_stage2_configs(args: argparse.Namespace) -> list[RunConfig]:
                     preferred_batch_size=BASELINE_PREFERRED_BATCH_SIZE,
                     similarity_threshold=-1,
                     instance_count=1,
-                    client_count=1,
+                    client_count=args.client_count,
                 )
             )
     return configs
@@ -843,7 +898,7 @@ def build_stage3_configs(survivors: set[tuple[int, int]], args: argparse.Namespa
                         preferred_batch_size=(batch_size,),
                         similarity_threshold=-1,
                         instance_count=1,
-                        client_count=1,
+                        client_count=args.client_count,
                     )
                 )
     return configs
@@ -951,8 +1006,8 @@ def generate_summary(results: dict[str, Any], path: Path) -> None:
         [
             "## Top Passing Configurations",
             "",
-            "| Run | Stage | Workers | FPS | Delay ms | Batch | Threshold | p95 E2E ms | Delivered FPS | Queue+Stale % |",
-            "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |",
+            "| Run | Stage | Workers | FPS | Delay ms | Batch | Threshold | p95 E2E ms | Delivered FPS | Queue+Stale % | Decode p95 ms | Preprocess p95 ms | Triton roundtrip p95 ms | Postprocess p95 ms | Microbatch avg size | Microbatch assembly p95 ms |",
+            "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for run in passing_sorted[:10]:
@@ -963,7 +1018,10 @@ def generate_summary(results: dict[str, Any], path: Path) -> None:
             f"| {run['run_id']} | {cfg['stage']} | {cfg['workers']} | {cfg['fps']} | "
             f"{format_metric(cfg['queue_delay_ms'])} | {cfg['preferred_batch_size']} | {cfg['similarity_threshold']} | "
             f"{format_metric(prom['gateway_p95_e2e_ms'])} | {format_metric(client['delivered_fps'])} | "
-            f"{format_metric(prom['queue_full_rate_pct'] + prom['stale_rate_pct'])} |"
+            f"{format_metric(prom['queue_full_rate_pct'] + prom['stale_rate_pct'])} | "
+            f"{format_metric(prom.get('decode_p95_ms', 0.0))} | {format_metric(prom.get('preprocess_p95_ms', 0.0))} | "
+            f"{format_metric(prom.get('triton_roundtrip_p95_ms', 0.0))} | {format_metric(prom.get('postprocess_p95_ms', 0.0))} | "
+            f"{format_metric(prom.get('microbatch_avg_size', 0.0))} | {format_metric(prom.get('microbatch_assembly_p95_ms', 0.0))} |"
         )
     lines.append("")
 

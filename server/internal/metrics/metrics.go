@@ -87,6 +87,26 @@ var (
 		Help:    "Time a frame spends waiting in the local worker queue before inference starts",
 		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
 	})
+	DecodeDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "yolo_decode_seconds",
+		Help:    "Time spent decoding JPEG input before preprocessing",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
+	})
+	PreprocessDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "yolo_preprocess_seconds",
+		Help:    "Time spent resizing and normalizing input before Triton inference",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
+	})
+	TritonRoundTripDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "yolo_triton_roundtrip_seconds",
+		Help:    "Time spent sending a request to Triton and receiving the raw output",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
+	})
+	PostprocessDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "yolo_postprocess_seconds",
+		Help:    "Time spent decoding Triton output into final detections",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
+	})
 	InferenceDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "yolo_inference_duration_seconds",
 		Help:    "YOLO inference latency per frame (includes pre/post processing)",
@@ -108,6 +128,16 @@ var (
 	WorkerPoolCapacity = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "yolo_worker_pool_capacity",
 		Help: "Total worker pool size",
+	})
+	MicrobatchSize = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "yolo_microbatch_size",
+		Help:    "Observed number of frames grouped into a single Triton request",
+		Buckets: prometheus.LinearBuckets(1, 1, 8),
+	})
+	MicrobatchAssemblyDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "yolo_microbatch_assembly_seconds",
+		Help:    "Time spent waiting to assemble a microbatch before calling Triton",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
 	})
 	ResultPublishDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "yolo_result_publish_seconds",

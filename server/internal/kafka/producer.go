@@ -17,6 +17,11 @@ type Producer struct {
 	logger *slog.Logger
 }
 
+type Header struct {
+	Key   string
+	Value []byte
+}
+
 func NewProducer(brokers []string, logger *slog.Logger) (*Producer, error) {
 	cfg := sarama.NewConfig()
 	cfg.Producer.RequiredAcks = sarama.WaitForAll
@@ -37,10 +42,22 @@ func (p *Producer) Publish(topic, key string, v any) error {
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-	_, _, err = p.p.SendMessage(&sarama.ProducerMessage{
-		Topic: topic,
-		Key:   sarama.StringEncoder(key),
-		Value: sarama.ByteEncoder(data),
+	return p.PublishBytes(topic, key, data, nil)
+}
+
+func (p *Producer) PublishBytes(topic, key string, value []byte, headers []Header) error {
+	recordHeaders := make([]sarama.RecordHeader, 0, len(headers))
+	for _, header := range headers {
+		recordHeaders = append(recordHeaders, sarama.RecordHeader{
+			Key:   []byte(header.Key),
+			Value: header.Value,
+		})
+	}
+	_, _, err := p.p.SendMessage(&sarama.ProducerMessage{
+		Topic:   topic,
+		Key:     sarama.StringEncoder(key),
+		Value:   sarama.ByteEncoder(value),
+		Headers: recordHeaders,
 	})
 	return err
 }

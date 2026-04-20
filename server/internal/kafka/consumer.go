@@ -12,7 +12,13 @@ import (
 	"github.com/IBM/sarama"
 )
 
-type MessageHandler func(ctx context.Context, key, value []byte) error
+type Message struct {
+	Key     []byte
+	Value   []byte
+	Headers map[string][]byte
+}
+
+type MessageHandler func(ctx context.Context, msg Message) error
 
 type Consumer struct {
 	group   sarama.ConsumerGroup
@@ -57,7 +63,15 @@ func (h *groupHandler) Setup(_ sarama.ConsumerGroupSession) error   { return nil
 func (h *groupHandler) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }
 func (h *groupHandler) ConsumeClaim(s sarama.ConsumerGroupSession, c sarama.ConsumerGroupClaim) error {
 	for msg := range c.Messages() {
-		if err := h.handler(s.Context(), msg.Key, msg.Value); err != nil {
+		headers := make(map[string][]byte, len(msg.Headers))
+		for _, header := range msg.Headers {
+			headers[string(header.Key)] = header.Value
+		}
+		if err := h.handler(s.Context(), Message{
+			Key:     msg.Key,
+			Value:   msg.Value,
+			Headers: headers,
+		}); err != nil {
 			h.logger.Error("handler error", "topic", msg.Topic, "error", err)
 			continue
 		}
