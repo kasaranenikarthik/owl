@@ -12,7 +12,10 @@ import colorsys
 import cv2
 import numpy as np
 
-from client import Detection, FrameResult, Stats
+try:
+    from .client import Detection, FrameResult, Stats
+except ImportError:  # pragma: no cover - allows direct script execution
+    from client import Detection, FrameResult, Stats
 
 
 def _colors(n: int) -> list[tuple[int, int, int]]:

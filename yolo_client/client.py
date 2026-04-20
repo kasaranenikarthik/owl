@@ -102,7 +102,7 @@ class RealtimeClient:
         self.stats = Stats()
 
         self._ws = None
-        self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=5)
+        self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=10)
         self._running = False
         self._send_times: dict[int, float] = {}
         self._sent_seq = 0
