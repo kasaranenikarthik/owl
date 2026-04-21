@@ -159,9 +159,7 @@ The most important supporting evidence is Triton's observed average batch size: 
 
 **Conclusion.** Once worker count is fixed at `2`, the safest tuning choice is **near-zero queue delay**. Preferred batch size is secondary because the pipeline is not naturally assembling large Triton batches in this configuration.
 
----
-
-## Experiment 3 — Triton model instance count
+## Experiment 4 — Triton model instance count
 
 **Purpose.** Test whether multiple model instances on the single available GPU improve throughput by allowing concurrent kernel execution.
 
