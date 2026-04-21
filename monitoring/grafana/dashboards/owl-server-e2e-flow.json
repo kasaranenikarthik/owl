@@ -1,0 +1,1420 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "1) WebSocket Ingress (Gateway)",
+      "type": "row",
+      "description": "Ingress stage where gateway accepts websocket clients and incoming frames.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "gateway_active_clients{job=\"gateway\"}",
+          "legendFormat": "active",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active WS Clients (Gateway)",
+      "type": "stat",
+      "description": "Current number of websocket clients connected to gateway.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_frames_received_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "frames in/s",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Incoming Frame Rate",
+      "type": "timeseries",
+      "description": "Frame ingress throughput at gateway websocket boundary.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(gateway_websocket_write_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "write p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_websocket_write_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "write p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(gateway_websocket_write_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "write p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "WS Write Latency",
+      "type": "timeseries",
+      "description": "Gateway websocket write latency percentiles for outbound responses.",
+      "transparent": true
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "id": 5,
+      "panels": [],
+      "title": "2) Gateway Intake, Cache, and Publish",
+      "type": "row",
+      "description": "Gateway stage for cache decisions, topic publish, and write failures.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 7
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_cache_hits_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "cache hits/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_cache_misses_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "cache misses/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Cache Hit vs Miss Rate",
+      "type": "timeseries",
+      "description": "Gateway cache hit/miss rates to quantify avoided inference work.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 8,
+        "y": 7
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * sum(rate(gateway_cache_hits_total{job=\"gateway\"}[5m])) / (sum(rate(gateway_cache_hits_total{job=\"gateway\"}[5m])) + sum(rate(gateway_cache_misses_total{job=\"gateway\"}[5m])))",
+          "legendFormat": "hit ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Hit Ratio",
+      "type": "stat",
+      "description": "Hit percentage over total cache decisions (hits + misses).",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(gateway_cache_lookup_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "lookup p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_cache_lookup_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "lookup p95",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Cache Lookup Latency",
+      "type": "timeseries",
+      "description": "p95 latency for cache lookup/update operations in gateway.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(gateway_frame_publish_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "publish p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_frame_publish_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "publish p95",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Gateway -> Kafka Publish Latency (Frames Topic)",
+      "type": "timeseries",
+      "description": "Latency to publish frame messages from gateway to Kafka frames topic.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 12,
+        "y": 14
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_frame_publish_failures_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "publish failures/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_websocket_write_failures_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "ws write failures/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Gateway Write Failure Rates",
+      "type": "timeseries",
+      "description": "Per-second failure rates for gateway Kafka publish and websocket writes.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 14
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_frames_dropped_stale_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "stale results dropped/s",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Gateway Stale Result Drops",
+      "type": "timeseries",
+      "description": "Results dropped at gateway when superseded by newer frame output.",
+      "transparent": true
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 12,
+      "panels": [],
+      "title": "3) Kafka Bridge Between Gateway and Inference",
+      "type": "row",
+      "description": "Topic handoff stage between gateway producer and inference consumer/publisher.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_frames_published_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "gateway published/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_consumed_total{job=\"inference\"}[1m]))",
+          "legendFormat": "inference consumed/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Frames Topic Flow (Gateway -> Inference)",
+      "type": "timeseries",
+      "description": "Compares gateway frame publish throughput with inference consume throughput to detect handoff lag.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_results_published_total{job=\"inference\"}[1m]))",
+          "legendFormat": "inference published/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_detections_consumed_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "gateway consumed/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Detections Topic Flow (Inference -> Gateway)",
+      "type": "timeseries",
+      "description": "Compares inference result publish throughput with gateway consume throughput for detection return path health.",
+      "transparent": true
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 15,
+      "panels": [],
+      "title": "4) Inference Queue and Worker Pool",
+      "type": "row",
+      "description": "Inference bridge queue pressure and worker capacity before Triton execution.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(yolo_worker_pool_queue_depth{job=\"inference\"})",
+          "legendFormat": "queue depth",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "max(yolo_worker_pool_active{job=\"inference\"})",
+          "legendFormat": "active workers",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "max(yolo_worker_pool_capacity{job=\"inference\"})",
+          "legendFormat": "worker capacity",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Worker Pool State",
+      "type": "timeseries",
+      "description": "Queue depth, active workers, and configured capacity of the inference bridge pool.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 31
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * max(yolo_worker_pool_active{job=\"inference\"}) / clamp_min(max(yolo_worker_pool_capacity{job=\"inference\"}), 1)",
+          "legendFormat": "active/capacity %",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Worker Utilization",
+      "type": "timeseries",
+      "description": "Percent of inference bridge worker capacity currently active.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 31
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_dropped_reason_total{job=\"inference\"}[1m])) by (reason)",
+          "legendFormat": "{{reason}} dropped/s",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Inference Frame Drops by Reason",
+      "type": "timeseries",
+      "description": "Inference bridge frame drop rate split by reason (for example stale age cutoff or queue saturation).",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 39
+      },
+      "id": 119,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_dropped_reason_total{job=\"inference\",reason=\"stale\"}[1m]))",
+          "legendFormat": "stale dropped before inference/s",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Stale Frames Dropped in Inference",
+      "type": "timeseries",
+      "description": "Frames dropped by inference bridge due to stale age cutoff before compute.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 39
+      },
+      "id": 120,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * sum(rate(process_cpu_seconds_total{job=\"inference\"}[1m]))",
+          "legendFormat": "cpu busy % (1 core=100)",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Go CPU Utilization",
+      "type": "timeseries",
+      "description": "Inference process CPU utilization derived from process_cpu_seconds_total (100% equals one fully used CPU core).",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 39
+      },
+      "id": 121,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(go_goroutines{job=\"inference\"})",
+          "legendFormat": "goroutines",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Go Goroutines",
+      "type": "timeseries",
+      "description": "Current number of goroutines in the inference process.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 39
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(yolo_worker_queue_wait_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "queue wait p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(yolo_worker_queue_wait_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "queue wait p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(yolo_worker_queue_wait_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "queue wait p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Worker Queue Wait Latency",
+      "type": "timeseries",
+      "description": "Time frames spend waiting in inference bridge queue before processing begins.",
+      "transparent": true
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "id": 20,
+      "panels": [],
+      "title": "5) Inference Compute and Detection Output",
+      "type": "row",
+      "description": "Inference bridge compute latency, throughput, and detection output characteristics.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(yolo_inference_duration_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "infer p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(yolo_inference_duration_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "infer p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(yolo_inference_duration_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "infer p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Inference Duration",
+      "type": "timeseries",
+      "description": "Per-frame inference processing duration in bridge (decode, preprocess, Triton call, postprocess).",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_processed_total{job=\"inference\"}[1m]))",
+          "legendFormat": "processed/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_dropped_total{job=\"inference\"}[1m]))",
+          "legendFormat": "dropped total/s",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_dropped_reason_total{job=\"inference\",reason=\"stale\"}[1m]))",
+          "legendFormat": "dropped stale/s",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_dropped_reason_total{job=\"inference\",reason=\"queue_full\"}[1m]))",
+          "legendFormat": "dropped queue_full/s",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Inference Throughput",
+      "type": "timeseries",
+      "description": "Processed throughput with total and reason-specific drop throughput in the inference bridge.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(yolo_detections_per_frame_bucket{job=\"inference\"}[5m])) by (le))",
+          "legendFormat": "detections/frame p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(yolo_detections_per_frame_bucket{job=\"inference\"}[5m])) by (le))",
+          "legendFormat": "detections/frame p95",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Detection Density",
+      "type": "timeseries",
+      "description": "Distribution of detections per processed frame.",
+      "transparent": true
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
+      "id": 24,
+      "panels": [],
+      "title": "6) Result Publish and End-to-End Delivery",
+      "type": "row",
+      "description": "Final delivery stage including result publish and client-visible latency.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 65
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(yolo_result_publish_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "result publish p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(yolo_result_publish_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "result publish p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(yolo_result_publish_seconds_bucket{job=\"inference\"}[5m])) by (le)) * 1000",
+          "legendFormat": "result publish p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Inference -> Kafka Publish Latency (Detections Topic)",
+      "type": "timeseries",
+      "description": "Latency to publish detection results from inference bridge to Kafka.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 65
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_result_publish_failures_total{job=\"inference\"}[1m]))",
+          "legendFormat": "result publish failures/s",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Inference Publish Failures",
+      "type": "timeseries",
+      "description": "Per-second failures while publishing inference results to Kafka.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 73
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(gateway_e2e_latency_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "e2e p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_e2e_latency_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "e2e p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(gateway_e2e_latency_seconds_bucket{job=\"gateway\"}[5m])) by (le)) * 1000",
+          "legendFormat": "e2e p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "End-to-End Client Latency",
+      "type": "timeseries",
+      "description": "Client-visible end-to-end latency percentiles measured at gateway.",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 73
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_frames_received_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "WS received/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_frames_published_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "gateway published/s",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_consumed_total{job=\"inference\"}[1m]))",
+          "legendFormat": "inference consumed/s",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_frames_processed_total{job=\"inference\"}[1m]))",
+          "legendFormat": "inference processed/s",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(yolo_results_published_total{job=\"inference\"}[1m]))",
+          "legendFormat": "results published/s",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(gateway_detections_consumed_total{job=\"gateway\"}[1m]))",
+          "legendFormat": "gateway detections consumed/s",
+          "range": true,
+          "refId": "F"
+        }
+      ],
+      "title": "End-to-End Throughput Funnel",
+      "type": "timeseries",
+      "description": "Stage-by-stage throughput funnel from ingress to final detections delivery.",
+      "transparent": true
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": [
+    "owl",
+    "server",
+    "e2e",
+    "gateway",
+    "inference"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "OWL Server E2E Flow",
+  "uid": "owl-server-e2e-flow",
+  "version": 1,
+  "weekStart": "",
+  "description": "Stage-by-stage server flow dashboard from websocket ingress through gateway, queueing, inference, publish, and end-to-end delivery."
+}

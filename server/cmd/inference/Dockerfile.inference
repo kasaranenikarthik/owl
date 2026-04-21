@@ -1,0 +1,15 @@
+FROM golang:1.25.5-bookworm AS builder
+
+WORKDIR /app
+COPY go.mod ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/inference ./cmd/inference
+
+FROM gcr.io/distroless/base-debian12
+
+COPY --from=builder /out/inference /inference
+
+EXPOSE 9090
+ENTRYPOINT ["/inference"]
