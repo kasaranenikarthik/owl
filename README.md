@@ -248,4 +248,4 @@ The Terraform configuration provisions:
 | Triton Inference Server | Standardized ONNX serving with GPU support and production-grade request handling |
 | WebSocket gateway | Enables bidirectional streaming for real-time result delivery without client polling |
 | Prometheus + Grafana | Native metrics pipeline for SLA validation, debugging, and capacity planning |
-| Stateless Go services | Simplifies horizontal scaling; all shared state lives in Kafka and Redis |
+| Go services | Low-latency concurrency with goroutines/channels |
