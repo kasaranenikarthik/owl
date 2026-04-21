@@ -2,4 +2,4 @@
 # __init__.py
 # =============================================================================
 
-from client import RealtimeClient
+from .client import RealtimeClient

@@ -16,15 +16,26 @@ import time
 
 import cv2
 
-from client import RealtimeClient, FrameResult
-from sources import (
-    WebcamSource,
-    VideoFileSource,
-    RTSPSource,
-    encode_jpeg,
-    FrameSource,
-)
-from renderer import draw_detections, draw_overlay
+try:
+    from .client import RealtimeClient, FrameResult
+    from .sources import (
+        WebcamSource,
+        VideoFileSource,
+        RTSPSource,
+        encode_jpeg,
+        FrameSource,
+    )
+    from .renderer import draw_detections, draw_overlay
+except ImportError:  # pragma: no cover - allows direct script execution
+    from client import RealtimeClient, FrameResult
+    from sources import (
+        WebcamSource,
+        VideoFileSource,
+        RTSPSource,
+        encode_jpeg,
+        FrameSource,
+    )
+    from renderer import draw_detections, draw_overlay
 
 logger = logging.getLogger("yolo_client")
 

@@ -76,7 +76,9 @@ services:
     image: python:3.11-slim
     container_name: owl-model-loader
     environment:
-      TRITON_EXECUTION_TARGET: "gpu"
+      TRITON_EXECUTION_TARGET: "${TRITON_EXECUTION_TARGET:-gpu}"
+      TRITON_CPU_CONFIG_PATH: "${TRITON_CPU_CONFIG_PATH:-/repo/server/internal/models/yolov8s/config.pbtxt}"
+      TRITON_GPU_CONFIG_PATH: "${TRITON_GPU_CONFIG_PATH:-/repo/server/internal/models/yolov8s/config.gpu.pbtxt}"
     command:
       - /bin/bash
       - -lc
@@ -84,8 +86,8 @@ services:
         set -e
         TRITON_EXECUTION_TARGET="$$(printf '%s' "$${TRITON_EXECUTION_TARGET:-cpu}" | tr '[:upper:]' '[:lower:]')"
         ONNX_PATH=/repo/server/internal/onnx/yolov8s.onnx
-        CPU_CONFIG_PATH=/repo/server/internal/models/yolov8s/config.pbtxt
-        GPU_CONFIG_PATH=/repo/server/internal/models/yolov8s/config.gpu.pbtxt
+        CPU_CONFIG_PATH="$${TRITON_CPU_CONFIG_PATH:-/repo/server/internal/models/yolov8s/config.pbtxt}"
+        GPU_CONFIG_PATH="$${TRITON_GPU_CONFIG_PATH:-/repo/server/internal/models/yolov8s/config.gpu.pbtxt}"
         MODEL_CONFIG_PATH="$$CPU_CONFIG_PATH"
         case "$$TRITON_EXECUTION_TARGET" in
           gpu)
@@ -168,9 +170,9 @@ services:
       KAFKA_DETECTIONS_TOPIC: "detections"
       KAFKA_CONSUMER_GROUP: "gateway-detections"
       REDIS_ADDR: "redis:6379"
-      SIMILARITY_THRESHOLD: "-1"
-      CACHE_TTL_SECONDS: "30"
-      CONFIDENCE_THRESHOLD: "0.5"
+      SIMILARITY_THRESHOLD: "${SIMILARITY_THRESHOLD:--1}"
+      CACHE_TTL_SECONDS: "${CACHE_TTL_SECONDS:-30}"
+      CONFIDENCE_THRESHOLD: "${CONFIDENCE_THRESHOLD:-0.5}"
     ports:
       - "8080:8080"
       - "19090:9090"
@@ -194,8 +196,9 @@ services:
       KAFKA_DETECTIONS_TOPIC: "detections"
       KAFKA_CONSUMER_GROUP: "yolo-inference"
       TRITON_HTTP_ADDR: "triton:8000"
-      NUM_WORKERS: "4"
-      CONFIDENCE_THRESHOLD: "0.5"
+      NUM_WORKERS: "${NUM_WORKERS:-4}"
+      STALE_FRAME_THRESHOLD_MS: "${STALE_FRAME_THRESHOLD_MS:-5000}"
+      CONFIDENCE_THRESHOLD: "${CONFIDENCE_THRESHOLD:-0.5}"
     ports:
       - "19091:9090"
     networks:
